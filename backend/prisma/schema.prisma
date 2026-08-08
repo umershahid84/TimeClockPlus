@@ -1,0 +1,290 @@
+// TimeClockPlus - Prisma schema (MariaDB)
+// Design goals:
+//  - Effective-dated schedules (never overwrite history)
+//  - Full audit trail on sensitive changes
+//  - Line-of-business separation with role based access control
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql" // MariaDB uses the mysql protocol/connector
+  url      = env("DATABASE_URL")
+}
+
+enum LineOfBusinessCode {
+  PUBLIC_PARKING
+  EMPLOYEE_PARKING
+  GROUND_TRANSPORTATION
+}
+
+enum EmploymentStatus {
+  FULL_TIME
+  PART_TIME
+}
+
+enum UserRole {
+  ADMINISTRATOR
+  SUPERVISOR
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ARCHIVED
+  REMOVED
+}
+
+enum TimesheetStatus {
+  OPEN
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  ARCHIVE
+  APPROVE
+  REJECT
+  LOGIN
+  PASSWORD_RESET
+  PERMISSION_CHANGE
+}
+
+enum AuditEntityType {
+  EMPLOYEE
+  SCHEDULE
+  TIMESHEET
+  TIMESHEET_ENTRY
+  USER
+  LINE_OF_BUSINESS
+  SYSTEM_SETTING
+}
+
+model LineOfBusiness {
+  id          Int                 @id @default(autoincrement())
+  code        LineOfBusinessCode  @unique
+  name        String              @db.VarChar(100)
+  createdAt   DateTime            @default(now())
+
+  employees        Employee[]
+  userAccess       UserLineOfBusiness[]
+
+  @@map("lines_of_business")
+}
+
+// Application users: Administrators and Supervisors.
+// Employee self-service login is out of scope today but the schema
+// leaves room for it via optionally linking a User to an Employee.
+model User {
+  id                    Int       @id @default(autoincrement())
+  userId                String    @unique @db.VarChar(50) // login "username"
+  email                 String    @unique @db.VarChar(255)
+  firstName             String    @db.VarChar(100)
+  lastName              String    @db.VarChar(100)
+  passwordHash          String    @db.VarChar(255)
+  role                  UserRole  @default(SUPERVISOR)
+  isAdministrator       Boolean   @default(false) // supervisors can ALSO be granted admin
+  canViewAllLinesOfBiz  Boolean   @default(false)
+  mustChangePassword    Boolean   @default(true)
+  isActive              Boolean   @default(true)
+  failedLoginAttempts   Int       @default(0)
+  lockedUntil           DateTime?
+  tempPasswordExpiresAt DateTime?
+  lastLoginAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  lineOfBusinessAccess  UserLineOfBusiness[]
+  passwordResets        PasswordReset[]
+  auditLogs             AuditLog[]           @relation("AuditActor")
+  approvedTimesheets    Timesheet[]          @relation("TimesheetApprover")
+  employeesCreated      Employee[]           @relation("EmployeeCreatedBy")
+  schedulesCreated      EmployeeSchedule[]   @relation("ScheduleCreatedBy")
+
+  @@map("users")
+}
+
+// Many-to-many: a supervisor may be assigned to one or more lines of business.
+model UserLineOfBusiness {
+  id               Int             @id @default(autoincrement())
+  userId           Int
+  lineOfBusinessId Int
+  canAddEmployees  Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lineOfBusiness   LineOfBusiness  @relation(fields: [lineOfBusinessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lineOfBusinessId])
+  @@map("user_lines_of_business")
+}
+
+model PasswordReset {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  codeHash   String    @db.VarChar(255) // one-time code, hashed at rest
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+// Core employee record. Fields here are the CURRENT/master profile fields
+// (name, contact info, hire date). Scheduling data lives in EmployeeSchedule
+// as effective-dated rows so history is preserved.
+model Employee {
+  id                Int              @id @default(autoincrement())
+  employeeCode      String           @unique @db.VarChar(50) // "Employee ID" business key
+  dateOfHire        DateTime
+  firstName         String           @db.VarChar(100)
+  lastName          String           @db.VarChar(100)
+  phoneNumber       String           @db.VarChar(30)
+  lineOfBusinessId  Int
+  status            EmployeeStatus   @default(ACTIVE)
+  createdById       Int?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  archivedAt        DateTime?
+
+  lineOfBusiness    LineOfBusiness   @relation(fields: [lineOfBusinessId], references: [id])
+  createdBy         User?            @relation("EmployeeCreatedBy", fields: [createdById], references: [id])
+
+  schedules         EmployeeSchedule[]
+  timesheets        Timesheet[]
+  customFields      EmployeeCustomFieldValue[]
+
+  @@index([lineOfBusinessId])
+  @@map("employees")
+}
+
+// Extensible custom fields so new employee attributes can be added
+// without schema migrations for every new requirement.
+model CustomFieldDefinition {
+  id          Int      @id @default(autoincrement())
+  fieldKey    String   @unique @db.VarChar(100)
+  label       String   @db.VarChar(150)
+  fieldType   String   @db.VarChar(30) // text, number, date, boolean, select
+  options     String?  @db.Text // JSON-encoded options for "select" type
+  createdAt   DateTime @default(now())
+
+  values      EmployeeCustomFieldValue[]
+
+  @@map("custom_field_definitions")
+}
+
+model EmployeeCustomFieldValue {
+  id           Int      @id @default(autoincrement())
+  employeeId   Int
+  fieldId      Int
+  value        String?  @db.Text
+  updatedAt    DateTime @updatedAt
+
+  employee     Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  field        CustomFieldDefinition  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, fieldId])
+  @@map("employee_custom_field_values")
+}
+
+// Effective-dated schedule. A new row is inserted for every schedule
+// change; existing rows are never overwritten. Historical reports resolve
+// the correct row by matching the report date against [effectiveDate, endDate).
+model EmployeeSchedule {
+  id                Int               @id @default(autoincrement())
+  employeeId        Int
+  employmentStatus  EmploymentStatus
+  shiftStartTime    String            @db.VarChar(5) // "HH:MM" 24h local
+  shiftEndTime      String            @db.VarChar(5) // "HH:MM" 24h local; may cross midnight
+  daysOff           String            @db.VarChar(100) // comma-separated: MON,TUE,...
+  effectiveDate     DateTime
+  endDate           DateTime?         // set automatically when superseded; null = current
+  notes             String?           @db.Text
+  createdById       Int?
+  createdAt         DateTime          @default(now())
+
+  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy         User?             @relation("ScheduleCreatedBy", fields: [createdById], references: [id])
+
+  @@index([employeeId, effectiveDate])
+  @@map("employee_schedules")
+}
+
+// One timesheet groups an employee's entries for a pay period
+// (the app's canonical period is biweekly, but weekly/monthly/custom
+// reporting is derived from the same TimesheetEntry rows).
+model Timesheet {
+  id              Int              @id @default(autoincrement())
+  employeeId      Int
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          TimesheetStatus  @default(OPEN)
+  approvedById    Int?
+  approvedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approvedBy      User?            @relation("TimesheetApprover", fields: [approvedById], references: [id])
+  entries         TimesheetEntry[]
+
+  @@unique([employeeId, periodStart, periodEnd])
+  @@index([employeeId, periodStart])
+  @@map("timesheets")
+}
+
+// A single day's worked time. clockIn/clockOut are stored as full
+// timestamps (so overnight shifts resolve unambiguously); decimalHours
+// is precomputed and persisted for fast, consistent reporting, but can
+// always be recomputed from the raw times + break minutes.
+model TimesheetEntry {
+  id               Int        @id @default(autoincrement())
+  timesheetId      Int
+  workDate         DateTime   // the shift's "belongs to" date, per business rule
+  clockIn          DateTime
+  clockOut         DateTime
+  unpaidBreakMins  Int        @default(0)
+  decimalHours     Decimal    @db.Decimal(6, 2)
+  notes            String?    @db.Text
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  timesheet        Timesheet  @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  @@index([timesheetId, workDate])
+  @@map("timesheet_entries")
+}
+
+model AuditLog {
+  id            Int              @id @default(autoincrement())
+  actorUserId   Int?
+  action        AuditAction
+  entityType    AuditEntityType
+  entityId      Int
+  employeeId    Int?             // convenience denormalization for employee-scoped queries
+  previousValue String?          @db.Text // JSON snapshot
+  newValue      String?          @db.Text // JSON snapshot
+  createdAt     DateTime         @default(now())
+
+  actor         User?            @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([employeeId])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique @db.VarChar(100)
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
