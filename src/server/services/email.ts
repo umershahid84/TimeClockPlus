@@ -5,17 +5,18 @@ let transporter: nodemailer.Transporter | null = null;
 
 function getTransporter() {
   if (!transporter) {
-    if (!env.smtp.host) {
-      // No SMTP configured (e.g. local dev without email). Fall back to a
-      // JSON transport so the app keeps working and emails are logged
-      // instead of silently failing.
+    if (!env.sendEmails || !env.email.host) {
+      // SEND_EMAILS=false, or no EMAIL_HOST configured (e.g. local dev
+      // without access to the internal relay). Fall back to a JSON
+      // transport so the app keeps working and emails are logged instead
+      // of silently failing or erroring out.
       transporter = nodemailer.createTransport({ jsonTransport: true });
     } else {
       transporter = nodemailer.createTransport({
-        host: env.smtp.host,
-        port: env.smtp.port,
-        secure: env.smtp.secure,
-        auth: env.smtp.user ? { user: env.smtp.user, pass: env.smtp.password } : undefined,
+        host: env.email.host,
+        port: env.email.port,
+        secure: env.email.secure,
+        auth: env.email.user ? { user: env.email.user, pass: env.email.pass } : undefined,
       });
     }
   }
@@ -23,15 +24,18 @@ function getTransporter() {
 }
 
 async function send(to: string, subject: string, html: string) {
+  // In non-production environments, TEST_EMAIL_USER (if set) captures all
+  // outgoing mail so test runs never reach real employee inboxes.
+  const recipient = !env.isProduction && env.testEmailUser ? env.testEmailUser : to;
   const info = await getTransporter().sendMail({
-    from: env.emailFrom,
-    to,
-    subject,
+    from: env.email.sender,
+    to: recipient,
+    subject: recipient === to ? subject : `[to: ${to}] ${subject}`,
     html,
   });
-  if (!env.smtp.host) {
+  if (!env.sendEmails || !env.email.host) {
     // eslint-disable-next-line no-console
-    console.log(`[email:dev-mode] to=${to} subject="${subject}"`, info.message?.toString());
+    console.log(`[email:dev-mode] to=${recipient} subject="${subject}"`, info.message?.toString());
   }
   return info;
 }

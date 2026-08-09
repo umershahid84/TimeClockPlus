@@ -6,13 +6,27 @@ Transportation** — covering employee management, effective-dated
 scheduling, timesheets with decimal-hour payroll calculations, reporting,
 and role-based administration.
 
+This is a **single integrated application**: one project, one
+`package.json`, one `npm install`, one build, one running process. There
+is no separate frontend/backend project to install, run, or deploy —
+Express serves both the `/api` routes and the built React app.
+
 ## Architecture
 
 ```
-backend/    Node.js + TypeScript + Express API, Prisma ORM, MariaDB
-frontend/   React + TypeScript + Vite single-page app
-docs/       Local and cloud setup guides
+prisma/             Database schema (Prisma ORM, MariaDB)
+src/
+  server/            Express API: routes, middleware, services, config, CLI scripts
+  client/            React + TypeScript single-page app (built by Vite)
+docs/                Local and cloud setup guides
+dist/                Build output (git-ignored): dist/server + dist/client
 ```
+
+In development, `npm run dev` runs the API (`tsx watch`) and the Vite dev
+server side by side, with Vite proxying `/api` to the API process. In
+production, `npm run build` compiles both, and `npm start` runs a single
+Node process that serves `/api/*` and the built `dist/client` static
+assets (with SPA fallback) from the same port.
 
 Key design decisions (mapped to the requirements they satisfy):
 
@@ -21,7 +35,7 @@ Key design decisions (mapped to the requirements they satisfy):
   row's `endDate` is set rather than overwritten. Reports resolve the
   schedule that was actually in effect for each date in the requested
   range, so historical accuracy is preserved even after schedules change.
-- **Decimal-hour payroll math** (`backend/src/utils/time.ts`): hours are
+- **Decimal-hour payroll math** (`src/server/utils/time.ts`): hours are
   always computed from actual clock-in/clock-out timestamps plus unpaid
   break minutes, then rounded once to 2 decimal places — never from
   pre-rounded intermediate values. Overnight shifts are resolved by
@@ -39,9 +53,9 @@ Key design decisions (mapped to the requirements they satisfy):
   login/forgot-password endpoints, account lockout after repeated
   failures, one-time password-reset codes that expire and are single-use,
   and a forgot-username flow that never reveals whether an account exists.
-- **Extensible employee fields**: `custom_field_definitions` /
-  `employee_custom_field_values` let new employee attributes be added
-  without a schema migration for every new field.
+- **Configuration via environment variables only** — no hard-coded
+  database, email, or JWT credentials anywhere in the source. See
+  `.env.example` for the full list.
 
 ## Getting started
 
@@ -51,26 +65,26 @@ Key design decisions (mapped to the requirements they satisfy):
 Quick start (after installing MariaDB — see the local setup guide):
 
 ```bash
-cd backend
-cp .env.example .env   # edit DATABASE_URL, JWT_SECRET, SMTP settings
+cp .env.example .env     # edit DB_*, JWT_SECRET, EMAIL_* as needed
 npm install
 npx prisma migrate dev --name init
 npm run setup -- --email=admin@example.com
-
-cd ../frontend
-cp .env.example .env
-npm install
-npm run dev             # in one terminal
-```
-
-```bash
-cd backend
-npm run dev              # in another terminal
+npm run dev               # runs API + web app together
 ```
 
 Then open http://localhost:5173 and sign in with the `admin` User ID and
-the temporary password emailed (or printed to the console if SMTP isn't
+the temporary password emailed (or printed to the console if email isn't
 configured).
+
+For a production-style run of the single integrated process:
+
+```bash
+npm run build
+npm start
+```
+
+This serves the whole application — API and web UI — from one process on
+`PORT` (default 4000).
 
 ## Roles
 
@@ -83,10 +97,22 @@ configured).
 | Manage supervisor accounts & permissions | ✔ | ✘ |
 | Grant Administrator privileges to a Supervisor | ✔ | ✘ |
 
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Run the API and web app together for local development |
+| `npm run build` | Build the client and compile the server for production |
+| `npm start` | Run the built application (single process) |
+| `npm run setup -- --email=admin@example.com` | Create the initial Administrator account |
+| `npm run prisma:migrate` | Create/apply a database migration in development |
+| `npm run prisma:deploy` | Apply migrations in production/CI |
+| `npm test` | Run the test suite |
+| `npm run typecheck` | Type-check both server and client |
+
 ## Testing
 
 ```bash
-cd backend
 npm test
 ```
 

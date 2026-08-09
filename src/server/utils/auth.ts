@@ -34,9 +34,12 @@ export interface JwtPayload {
 }
 
 export function signJwt(payload: JwtPayload): string {
-  return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as jwt.SignOptions);
+  return jwt.sign(payload, env.jwtSecret, {
+    expiresIn: env.jwtExpiresIn,
+    algorithm: env.jwtAlgorithm,
+  } as jwt.SignOptions);
 }
 
 export function verifyJwt(token: string): JwtPayload {
-  return jwt.verify(token, env.jwtSecret) as JwtPayload;
+  return jwt.verify(token, env.jwtSecret, { algorithms: [env.jwtAlgorithm] }) as JwtPayload;
 }

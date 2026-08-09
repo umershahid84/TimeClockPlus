@@ -1,13 +1,14 @@
 # Local Installation Guide
 
-This guide sets up TimeClockPlus (API + web app) against a local MariaDB
+TimeClockPlus is a single integrated application (one project, one
+`npm install`, one build). This guide sets it up against a local MariaDB
 instance.
 
 ## 1. Prerequisites
 
 - Node.js 20+ and npm
-- MariaDB 10.6+ (or MySQL 8+, which is wire-compatible with the Prisma
-  `mysql` connector used here)
+- MariaDB 10.6+ (or MySQL 8+, which is wire-compatible with the database
+  driver used here)
 
 ## 2. Install MariaDB
 
@@ -36,9 +37,9 @@ run it, keeping the default port (3306).
 
 ```bash
 docker run -d --name timeclockplus-db \
-  -e MARIADB_DATABASE=timeclockplus \
-  -e MARIADB_USER=tcp_user \
-  -e MARIADB_PASSWORD=tcp_password \
+  -e MARIADB_DATABASE=tcp \
+  -e MARIADB_USER=account \
+  -e MARIADB_PASSWORD=abcdefg \
   -e MARIADB_ROOT_PASSWORD=root_password \
   -p 3306:3306 \
   mariadb:11
@@ -50,41 +51,46 @@ Skip this step if you used the Docker command above (it already creates
 the database and user).
 
 ```sql
-CREATE DATABASE timeclockplus CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'tcp_user'@'localhost' IDENTIFIED BY 'tcp_password';
-GRANT ALL PRIVILEGES ON timeclockplus.* TO 'tcp_user'@'localhost';
+CREATE DATABASE tcp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'account'@'localhost' IDENTIFIED BY 'abcdefg';
+GRANT ALL PRIVILEGES ON tcp.* TO 'account'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
 ## 4. Configure environment variables
 
 ```bash
-cd backend
 cp .env.example .env
 ```
 
 Edit `.env` and set at minimum:
 
-- `DATABASE_URL="mysql://tcp_user:tcp_password@localhost:3306/timeclockplus"`
-- `JWT_SECRET` to a long random string (e.g. `openssl rand -hex 32`)
-- SMTP settings if you want real emails sent. If left blank, emails are
-  logged to the console instead of sent (useful for local development).
+```
+DB_HOST = localhost
+DB_PORT = 3306
+DB_NAME = tcp
+DB_USER = account
+DB_PASS = abcdefg
+DB_DIALECT = mariadb
 
-```bash
-cd ../frontend
-cp .env.example .env
+JWT_SECRET = <a long random string, e.g. output of `openssl rand -hex 32`>
 ```
 
-The frontend's Vite dev server proxies `/api` to `http://localhost:4000`
-by default, so `VITE_API_BASE_URL` can be left blank locally.
+The application builds its database connection string from `DB_HOST`,
+`DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASS` at startup — there is no
+separate connection-string variable to keep in sync.
+
+Email settings (`EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`,
+`EMAIL_SENDER`, `EMAIL_SECURE`) are optional for local development. If
+`SEND_EMAILS=false` or `EMAIL_HOST` is left blank, emails are logged to
+the console instead of sent, so you can still exercise the
+password-reset/supervisor-invite flows without a real mail server.
 
 ## 5. Install dependencies and run migrations
 
 ```bash
-cd backend
 npm install
 npx prisma migrate dev --name init
-npm run prisma:generate
 ```
 
 This creates all tables (lines of business, users, employees,
@@ -100,28 +106,30 @@ npm run setup -- --email=admin@example.com
 This seeds the three lines of business (Public Parking, Employee Parking,
 Ground Transportation), creates the initial Administrator account with
 User ID `admin`, and emails a temporary password + login link (or prints
-it to the console if SMTP isn't configured).
+it to the console if email isn't configured).
 
 ## 7. Start the application
 
-In two terminals:
-
 ```bash
-# Terminal 1 - API
-cd backend
-npm run dev
-
-# Terminal 2 - Web app
-cd frontend
 npm run dev
 ```
 
-Visit http://localhost:5173, log in with `admin` and the temporary
-password, and set a new password when prompted.
+This runs the API and the Vite dev server for the web app together in one
+command. Visit http://localhost:5173, log in with `admin` and the
+temporary password, and set a new password when prompted.
+
+To run it the way it runs in production — a single built process serving
+both the API and the web UI on one port:
+
+```bash
+npm run build
+npm start
+```
+
+Then visit http://localhost:4000 (or whatever `PORT` you configured).
 
 ## 8. Running tests
 
 ```bash
-cd backend
 npm test
 ```

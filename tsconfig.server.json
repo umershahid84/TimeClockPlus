@@ -4,8 +4,8 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "lib": ["ES2022"],
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "dist/server",
+    "rootDir": "src/server",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,5 +14,5 @@
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["src"]
+  "include": ["src/server"]
 }

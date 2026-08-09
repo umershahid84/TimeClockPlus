@@ -78,8 +78,8 @@ async function main() {
 
   console.log("\nAdministrator account created successfully.");
   console.log("A setup email has been sent to the Administrator.");
-  if (!env.smtp.host) {
-    console.log(`\n(No SMTP configured - dev mode credentials below)\nUser ID: ${userId}\nTemporary Password: ${tempPassword}`);
+  if (!env.sendEmails || !env.email.host) {
+    console.log(`\n(Email not configured/enabled - dev mode credentials below)\nUser ID: ${userId}\nTemporary Password: ${tempPassword}`);
   }
 }
 
