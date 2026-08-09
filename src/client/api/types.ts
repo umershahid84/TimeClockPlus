@@ -84,3 +84,9 @@ export interface PayPeriodTimesheet {
   entries: TimesheetEntry[];
   totals: PayPeriodTotals;
 }
+
+export interface RosterRow {
+  employee: Employee;
+  schedule: EmployeeSchedule;
+  entry: TimesheetEntry | null;
+}

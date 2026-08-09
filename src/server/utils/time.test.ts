@@ -57,4 +57,16 @@ describe("splitRegularAndOvertime", () => {
   it("treats all worked time as Regular when there is no scheduled shift to compare", () => {
     expect(splitRegularAndOvertime(6.5, null)).toEqual({ regularHours: 6.5, otHours: 0 });
   });
+
+  it("splits an early-in/late-out overnight shift correctly when the same break applies to both scheduled and actual (regression: was 10.50/1.50 instead of 10.00/2.00)", () => {
+    // Scheduled: 2:00 PM - 12:30 AM (10.5 raw hours), actual: 1:00 PM - 1:30 AM
+    // (12.5 raw hours) - a 30-minute unpaid break applies to both.
+    const scheduled = resolveShiftTimes(new Date("2026-01-01T00:00:00Z"), "14:00", "00:30");
+    const actual = resolveShiftTimes(new Date("2026-01-01T00:00:00Z"), "13:00", "01:30");
+    const scheduledHours = calculateDecimalHours(scheduled.start, scheduled.end, 30);
+    const workedHours = calculateDecimalHours(actual.start, actual.end, 30);
+    expect(scheduledHours).toBe(10);
+    expect(workedHours).toBe(12);
+    expect(splitRegularAndOvertime(workedHours, scheduledHours)).toEqual({ regularHours: 10, otHours: 2 });
+  });
 });

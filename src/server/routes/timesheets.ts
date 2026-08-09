@@ -4,9 +4,10 @@ import { prisma } from "../config/prisma";
 import { assertLineOfBusinessAccess, requireAuth } from "../middleware/auth";
 import { recordAudit } from "../services/audit";
 import { resolveScheduleForDate } from "./schedules";
-import { calculateDecimalHours, combineDateAndTime, resolveShiftTimes, splitRegularAndOvertime, sumDecimalHours } from "../utils/time";
+import { DAY_CODES, calculateDecimalHours, combineDateAndTime, parseDaysOff, resolveShiftTimes, splitRegularAndOvertime, sumDecimalHours } from "../utils/time";
 import { getPayPeriodForDate } from "../utils/payPeriod";
 import { asyncHandler } from "../utils/asyncHandler";
+import { env } from "../config/env";
 
 export const timesheetsRouter = Router();
 timesheetsRouter.use(requireAuth);
@@ -80,6 +81,60 @@ timesheetsRouter.get("/employee/:employeeId/pay-period", asyncHandler(async (req
   });
 }));
 
+/**
+ * Daily roster: every active employee (within the caller's authorized
+ * lines of business) who is actually scheduled to work on `date` - i.e.
+ * has a schedule in effect that day and that day isn't one of their days
+ * off - along with whatever timesheet entry already exists for that date,
+ * if any. Lets a supervisor see at a glance who still needs a day added
+ * vs. who's already been entered, without hunting through each
+ * employee's pay period one at a time.
+ */
+timesheetsRouter.get("/roster", asyncHandler(async (req, res) => {
+  const date = req.query.date ? new Date(String(req.query.date)) : new Date();
+  if (isNaN(date.getTime())) return res.status(400).json({ error: "Invalid date" });
+  const lineOfBusinessId = req.query.lineOfBusinessId ? Number(req.query.lineOfBusinessId) : undefined;
+
+  if (lineOfBusinessId !== undefined && !assertLineOfBusinessAccess(req.user!, lineOfBusinessId)) {
+    return res.status(403).json({ error: "Not authorized for this line of business" });
+  }
+
+  const employees = await prisma.employee.findMany({
+    where: {
+      status: "ACTIVE",
+      ...(lineOfBusinessId
+        ? { lineOfBusinessId }
+        : req.user!.isAdministrator || req.user!.canViewAllLinesOfBiz
+          ? {}
+          : { lineOfBusinessId: { in: req.user!.lineOfBusinessIds } }),
+    },
+    include: { lineOfBusiness: true },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  });
+
+  // getUTCDay(): 0=Sun..6=Sat; DAY_CODES is Mon-first, so shift by 6 (mod 7).
+  const dayCode = DAY_CODES[(date.getUTCDay() + 6) % 7];
+
+  const rows = [];
+  for (const employee of employees) {
+    const schedule = await resolveScheduleForDate(employee.id, date);
+    if (!schedule) continue;
+    if (parseDaysOff(schedule.daysOff).includes(dayCode)) continue;
+
+    const entry = await prisma.timesheetEntry.findFirst({
+      where: { workDate: date, timesheet: { employeeId: employee.id } },
+    });
+
+    rows.push({
+      employee,
+      schedule,
+      entry: entry ? serializeEntry(entry) : null,
+    });
+  }
+
+  res.json(rows);
+}));
+
 const addDaySchema = z.object({ workDate: z.coerce.date() });
 
 /**
@@ -109,11 +164,20 @@ timesheetsRouter.post("/employee/:employeeId/entries", asyncHandler(async (req, 
   }
 
   // Actual time defaults to the scheduled shift (or, lacking a schedule, an
-  // explicit zero-length placeholder) until a supervisor edits it.
+  // explicit zero-length placeholder) until a supervisor edits it. The
+  // unpaid meal break defaults to DEFAULT_UNPAID_BREAK_MINUTES and - this
+  // is important - is applied to BOTH the scheduled shift length and the
+  // actual worked time below, so Regular/OT is always split on an
+  // apples-to-apples basis (see the PUT /entries/:id handler for the same
+  // rule applied when a supervisor edits the actual time).
+  const unpaidBreakMins = env.defaultUnpaidBreakMinutes;
   const clockIn = scheduledClockIn ?? combineDateAndTime(workDate, "00:00");
   const clockOut = scheduledClockOut ?? combineDateAndTime(workDate, "00:00");
-  const decimalHours = calculateDecimalHours(clockIn, clockOut, 0);
-  const scheduledHours = scheduledClockIn && scheduledClockOut ? calculateDecimalHours(scheduledClockIn, scheduledClockOut, 0) : null;
+  const decimalHours = calculateDecimalHours(clockIn, clockOut, unpaidBreakMins);
+  const scheduledHours =
+    scheduledClockIn && scheduledClockOut
+      ? calculateDecimalHours(scheduledClockIn, scheduledClockOut, unpaidBreakMins)
+      : null;
   const { regularHours, otHours } = splitRegularAndOvertime(decimalHours, scheduledHours);
 
   try {
@@ -134,7 +198,7 @@ timesheetsRouter.post("/employee/:employeeId/entries", asyncHandler(async (req, 
           scheduledClockOut,
           clockIn,
           clockOut,
-          unpaidBreakMins: 0,
+          unpaidBreakMins,
           regularHours,
           otHours,
           decimalHours,
@@ -225,10 +289,17 @@ timesheetsRouter.put("/entries/:id", asyncHandler(async (req, res) => {
   }
   const unpaidBreakMins = data.unpaidBreakMins ?? entry.unpaidBreakMins;
 
+  // The same break minutes must be subtracted from the scheduled shift
+  // length here as from the actual worked time above - otherwise Regular
+  // vs. OT is split by comparing a break-adjusted "actual" against a
+  // not-break-adjusted "scheduled", which silently shifts the OT cutoff
+  // by the break amount (this was the reported bug: a 10.5-hour raw
+  // schedule with a 30-minute break should cap Regular at 10.0 hours, not
+  // 10.5).
   const decimalHours = calculateDecimalHours(clockIn, clockOut, unpaidBreakMins);
   const scheduledHours =
     entry.scheduledClockIn && entry.scheduledClockOut
-      ? calculateDecimalHours(entry.scheduledClockIn, entry.scheduledClockOut, 0)
+      ? calculateDecimalHours(entry.scheduledClockIn, entry.scheduledClockOut, unpaidBreakMins)
       : null;
   const { regularHours, otHours } = splitRegularAndOvertime(decimalHours, scheduledHours);
 

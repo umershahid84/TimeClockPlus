@@ -104,10 +104,18 @@ employeesRouter.post("/", requireAdministrator, asyncHandler(async (req, res) =>
   res.status(201).json(employee);
 }));
 
+// Admins can edit any master-data field on an employee, including moving
+// them to a different line of business. (Their historical schedules and
+// timesheets stay attached to the employee record regardless of a later
+// line-of-business change - only future access/reporting follows the new
+// assignment.)
 const updateEmployeeSchema = z.object({
+  employeeCode: z.string().min(1).optional(),
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
   phoneNumber: z.string().min(1).optional(),
+  dateOfHire: z.coerce.date().optional(),
+  lineOfBusinessId: z.number().int().optional(),
 });
 
 employeesRouter.put("/:id", requireAdministrator, asyncHandler(async (req, res) => {
@@ -117,7 +125,21 @@ employeesRouter.put("/:id", requireAdministrator, asyncHandler(async (req, res) 
   const parsed = updateEmployeeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const updated = await prisma.employee.update({ where: { id }, data: parsed.data });
+  if (parsed.data.lineOfBusinessId !== undefined) {
+    const lob = await prisma.lineOfBusiness.findUnique({ where: { id: parsed.data.lineOfBusinessId } });
+    if (!lob) return res.status(400).json({ error: "Unknown line of business" });
+  }
+
+  let updated;
+  try {
+    updated = await prisma.employee.update({ where: { id }, data: parsed.data, include: { lineOfBusiness: true } });
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "P2002") {
+      return res.status(409).json({ error: `Employee ID "${parsed.data.employeeCode}" is already in use.` });
+    }
+    throw err;
+  }
+
   await recordAudit({
     actorUserId: req.user!.id,
     action: "UPDATE",
@@ -141,6 +163,26 @@ employeesRouter.post("/:id/archive", requireAdministrator, asyncHandler(async (r
   await recordAudit({
     actorUserId: req.user!.id,
     action: "ARCHIVE",
+    entityType: "EMPLOYEE",
+    entityId: id,
+    employeeId: id,
+    previousValue: existing,
+    newValue: updated,
+  });
+  res.json(updated);
+}));
+
+employeesRouter.post("/:id/reactivate", requireAdministrator, asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const existing = await prisma.employee.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: "Employee not found" });
+  const updated = await prisma.employee.update({
+    where: { id },
+    data: { status: "ACTIVE", archivedAt: null },
+  });
+  await recordAudit({
+    actorUserId: req.user!.id,
+    action: "UPDATE",
     entityType: "EMPLOYEE",
     entityId: id,
     employeeId: id,

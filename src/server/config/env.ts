@@ -86,6 +86,14 @@ export const env = {
 
   decimalHoursPrecision: Number(process.env.DECIMAL_HOURS_PRECISION ?? 2),
 
+  // Auto-applied to every new timesheet day (Add Day) as the unpaid meal
+  // break, per the organization's payroll rules. A supervisor can still
+  // override it per day. This same value is applied to BOTH the scheduled
+  // shift length and the actual worked time when splitting Regular vs.
+  // OT, so the two are always compared on the same basis - see
+  // routes/timesheets.ts for why that matters.
+  defaultUnpaidBreakMinutes: Number(process.env.DEFAULT_UNPAID_BREAK_MINUTES ?? 30),
+
   // IANA timezone the organization operates in. All times shown to users
   // (UI, reports, exports, audit logs) are converted to this timezone -
   // never displayed as UTC/Zulu. Timestamps are still stored in UTC.
