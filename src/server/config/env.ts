@@ -66,6 +66,15 @@ export const env = {
     user: process.env.EMAIL_USER ?? "",
     pass: process.env.EMAIL_PASS ?? "",
     sender: process.env.EMAIL_SENDER ?? process.env.EMAIL_USER ?? "no-reply@example.com",
+    // Internal-only relays often present a self-signed or expired
+    // certificate that a real client would never accept over the public
+    // internet, but is fine on a trusted internal network. Set
+    // EMAIL_TLS_REJECT_UNAUTHORIZED=false to accept it anyway rather than
+    // failing every send with "certificate has expired"/"self signed
+    // certificate". Set EMAIL_IGNORE_TLS=true to skip STARTTLS entirely if
+    // the relay doesn't need encryption at all.
+    rejectUnauthorizedTls: bool("EMAIL_TLS_REJECT_UNAUTHORIZED", true),
+    ignoreTls: bool("EMAIL_IGNORE_TLS", false),
   },
   // When set (typically in non-production environments), every outgoing
   // email is redirected to this address instead of the real recipient, so

@@ -86,6 +86,13 @@ Email settings (`EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`,
 the console instead of sent, so you can still exercise the
 password-reset/supervisor-invite flows without a real mail server.
 
+**Internal SMTP relays and TLS errors:** an internal-only relay often
+presents a self-signed or expired certificate. If sending fails with
+`certificate has expired` or `self signed certificate`, set
+`EMAIL_TLS_REJECT_UNAUTHORIZED=false` in `.env` to accept it anyway (safe
+on a trusted internal network). If the relay doesn't use STARTTLS at all,
+set `EMAIL_IGNORE_TLS=true` instead.
+
 ## 5. Install dependencies and run migrations
 
 ```bash

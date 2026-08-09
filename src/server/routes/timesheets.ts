@@ -17,6 +17,28 @@ async function assertEmployeeAccess(req: import("express").Request, employeeId: 
   return employee;
 }
 
+// Prisma's Decimal fields serialize to STRINGS through res.json() (Decimal
+// defines its own toJSON()), which would otherwise silently hand the
+// client "8.50" instead of 8.5 and break any .toFixed()/arithmetic call
+// there. Every response that includes a TimesheetEntry must go through
+// this so the client always receives real numbers.
+function serializeEntry<T extends { regularHours: unknown; otHours: unknown; decimalHours: unknown; supplementalHours: unknown }>(
+  entry: T
+): Omit<T, "regularHours" | "otHours" | "decimalHours" | "supplementalHours"> & {
+  regularHours: number;
+  otHours: number;
+  decimalHours: number;
+  supplementalHours: number;
+} {
+  return {
+    ...entry,
+    regularHours: Number(entry.regularHours),
+    otHours: Number(entry.otHours),
+    decimalHours: Number(entry.decimalHours),
+    supplementalHours: Number(entry.supplementalHours),
+  };
+}
+
 function computeTotals(entries: { regularHours: unknown; otHours: unknown; supplementalHours: unknown; decimalHours: unknown }[]) {
   const regularHours = sumDecimalHours(entries.map((e) => Number(e.regularHours)));
   const otHours = sumDecimalHours(entries.map((e) => Number(e.otHours)));
@@ -52,7 +74,7 @@ timesheetsRouter.get("/employee/:employeeId/pay-period", async (req, res) => {
     periodEnd,
     timesheetId: timesheet?.id ?? null,
     status: timesheet?.status ?? "OPEN",
-    entries,
+    entries: entries.map(serializeEntry),
     totals: computeTotals(entries),
   });
 });
@@ -130,7 +152,7 @@ timesheetsRouter.post("/employee/:employeeId/entries", async (req, res) => {
       newValue: result.entry,
     });
 
-    res.status(201).json({ ...result.entry, hasSchedule: Boolean(schedule) });
+    res.status(201).json({ ...serializeEntry(result.entry), hasSchedule: Boolean(schedule) });
   } catch (err) {
     if (err instanceof Error && err.message === "APPROVED_LOCKED") {
       return res.status(409).json({ error: "This pay period's timesheet has already been approved and is locked." });
@@ -259,7 +281,7 @@ timesheetsRouter.put("/entries/:id", async (req, res) => {
     },
   });
 
-  res.json(updated);
+  res.json(serializeEntry(updated));
 });
 
 timesheetsRouter.delete("/entries/:id", async (req, res) => {

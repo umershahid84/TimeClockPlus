@@ -16,7 +16,9 @@ function getTransporter() {
         host: env.email.host,
         port: env.email.port,
         secure: env.email.secure,
+        ignoreTLS: env.email.ignoreTls,
         auth: env.email.user ? { user: env.email.user, pass: env.email.pass } : undefined,
+        tls: { rejectUnauthorized: env.email.rejectUnauthorizedTls },
       });
     }
   }
