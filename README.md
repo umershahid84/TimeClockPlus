@@ -61,6 +61,7 @@ Key design decisions (mapped to the requirements they satisfy):
 
 - Local installation: see [`docs/SETUP_LOCAL.md`](docs/SETUP_LOCAL.md)
 - Cloud deployment (free-tier friendly): see [`docs/DEPLOY_CLOUD.md`](docs/DEPLOY_CLOUD.md)
+- Running continuously on a Linux server (systemd): see [`docs/SYSTEMD.md`](docs/SYSTEMD.md)
 
 Quick start (after installing MariaDB — see the local setup guide):
 

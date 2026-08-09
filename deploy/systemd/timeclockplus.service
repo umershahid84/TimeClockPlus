@@ -1,0 +1,51 @@
+[Unit]
+Description=TimeClockPlus (Timeclock and Employee Scheduling application)
+Documentation=https://github.com/umershahid84/TimeClockPlus
+# Adjust/remove the mariadb dependency line to match your system's MariaDB
+# unit name (mariadb.service on most distros, mysql.service on Debian/Ubuntu
+# with the mysql-compatible package) - or drop it if MariaDB runs elsewhere.
+After=network-online.target mariadb.service
+Wants=network-online.target
+# Give Prisma/MariaDB time to accept connections on boot: allow up to 5
+# restarts within 60s before systemd gives up and leaves the unit failed.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+# --- Adjust these three for your install ---
+User=timeclockplus
+Group=timeclockplus
+WorkingDirectory=/opt/timeclockplus
+
+# `npm run build` must have been run once in WorkingDirectory so
+# dist/server and dist/client exist before this unit starts.
+# Run `which node` as the service user and update this path if it isn't
+# /usr/bin/node (e.g. a per-user nvm install would need the full nvm path).
+ExecStart=/usr/bin/node dist/server/index.js
+
+# Environment variables come from WorkingDirectory/.env (loaded by the
+# app itself via dotenv) - see .env.example. NODE_ENV is set here too
+# since it also controls Node's own behavior, not just the app's.
+Environment=NODE_ENV=production
+
+Restart=on-failure
+RestartSec=5
+
+# --- Light process sandboxing ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# The app itself is stateless (all state lives in MariaDB); it doesn't
+# need write access to its own directory at runtime.
+ReadWritePaths=
+
+# Logs go to the journal - view with: journalctl -u timeclockplus -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=timeclockplus
+
+[Install]
+WantedBy=multi-user.target
