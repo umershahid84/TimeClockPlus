@@ -2,11 +2,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { Employee, EmployeeSchedule } from "../api/types";
+import { formatDate } from "../utils/time";
+import { useAuth } from "../context/AuthContext";
 
 const DAY_OPTIONS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 export function EmployeeDetailPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [schedules, setSchedules] = useState<EmployeeSchedule[]>([]);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
@@ -66,21 +69,23 @@ export function EmployeeDetailPage() {
       <div className="card">
         <p><strong>Line of Business:</strong> {employee.lineOfBusiness?.name}</p>
         <p><strong>Phone:</strong> {employee.phoneNumber}</p>
-        <p><strong>Date of Hire:</strong> {new Date(employee.dateOfHire).toLocaleDateString()}</p>
+        <p><strong>Date of Hire:</strong> {formatDate(employee.dateOfHire)}</p>
         <p><strong>Status:</strong> {employee.status}</p>
-        {employee.status === "ACTIVE" && (
+        {user?.isAdministrator && employee.status === "ACTIVE" && (
           <button className="btn danger" onClick={archive}>Archive Employee</button>
         )}
       </div>
 
       <div className="topbar">
         <h3>Schedule History</h3>
-        <button className="btn" onClick={() => setShowScheduleForm((s) => !s)}>
-          {showScheduleForm ? "Cancel" : "Change Schedule"}
-        </button>
+        {user?.isAdministrator && (
+          <button className="btn" onClick={() => setShowScheduleForm((s) => !s)}>
+            {showScheduleForm ? "Cancel" : "Change Schedule"}
+          </button>
+        )}
       </div>
 
-      {showScheduleForm && (
+      {showScheduleForm && user?.isAdministrator && (
         <div className="card">
           <p className="muted">
             Saving creates a new effective-dated schedule. The prior schedule is preserved and will
@@ -139,8 +144,8 @@ export function EmployeeDetailPage() {
           <tbody>
             {schedules.map((s) => (
               <tr key={s.id}>
-                <td>{new Date(s.effectiveDate).toLocaleDateString()}</td>
-                <td>{s.endDate ? new Date(s.endDate).toLocaleDateString() : "Present"}</td>
+                <td>{formatDate(s.effectiveDate)}</td>
+                <td>{s.endDate ? formatDate(s.endDate) : "Present"}</td>
                 <td>{s.employmentStatus === "FULL_TIME" ? "Full-Time" : "Part-Time"}</td>
                 <td>{s.shiftStartTime} - {s.shiftEndTime}</td>
                 <td>{s.daysOff}</td>

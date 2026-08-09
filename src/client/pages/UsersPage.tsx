@@ -39,7 +39,6 @@ export function UsersPage() {
     lastName: "",
     email: "",
     lineOfBusinessIds: [] as number[],
-    canAddEmployees: false,
     grantAdministrator: false,
   });
 
@@ -111,12 +110,6 @@ export function UsersPage() {
                   </label>
                 ))}
               </div>
-            </div>
-            <div className="field">
-              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <input type="checkbox" style={{ width: "auto" }} checked={form.canAddEmployees} onChange={(e) => setForm({ ...form, canAddEmployees: e.target.checked })} />
-                Allow this supervisor to add employees
-              </label>
             </div>
             <div className="field">
               <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>

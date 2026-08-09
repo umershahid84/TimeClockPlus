@@ -202,7 +202,6 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       id: a.lineOfBusiness.id,
       code: a.lineOfBusiness.code,
       name: a.lineOfBusiness.name,
-      canAddEmployees: a.canAddEmployees,
     })),
   });
 });

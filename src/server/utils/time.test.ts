@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateDecimalHours, resolveShiftTimes, roundTo } from "./time";
+import { calculateDecimalHours, resolveShiftTimes, roundTo, splitRegularAndOvertime } from "./time";
 
 describe("calculateDecimalHours", () => {
   it("converts common durations to decimal hours", () => {
@@ -42,5 +42,19 @@ describe("roundTo", () => {
     expect(roundTo(8.1234)).toBe(8.12);
     expect(roundTo(8.126)).toBe(8.13);
     expect(roundTo(1.001)).toBe(1);
+  });
+});
+
+describe("splitRegularAndOvertime", () => {
+  it("treats hours within the scheduled shift as all Regular", () => {
+    expect(splitRegularAndOvertime(8.42, 8.5)).toEqual({ regularHours: 8.42, otHours: 0 });
+  });
+
+  it("classifies hours beyond the scheduled shift as OT (08:00-17:30 vs 08:00-16:30 scheduled)", () => {
+    expect(splitRegularAndOvertime(9, 8)).toEqual({ regularHours: 8, otHours: 1 });
+  });
+
+  it("treats all worked time as Regular when there is no scheduled shift to compare", () => {
+    expect(splitRegularAndOvertime(6.5, null)).toEqual({ regularHours: 6.5, otHours: 0 });
   });
 });

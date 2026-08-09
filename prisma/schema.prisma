@@ -42,6 +42,45 @@ enum TimesheetStatus {
   REJECTED
 }
 
+// What happened relative to the scheduled shift (separate from the
+// Supplemental Time and Time Type classifications - see TimesheetEntry).
+enum AttendanceAdjustment {
+  NONE
+  TARDY
+  LEFT_EARLY
+  ARRIVED_LATE
+}
+
+// Paid/unpaid time used to supplement worked hours (kept separate from
+// worked hours so payroll can see "worked" vs "credited" separately).
+enum SupplementalTimeType {
+  NONE
+  SICK
+  PTO
+  FCA
+  FMLA
+  LWOP
+}
+
+// The primary reason/type for the day's time entry.
+enum TimeType {
+  REGULAR_SHIFT
+  SICK
+  FCA
+  FMLA
+  NO_CALL_NO_SHOW
+  BEREAVEMENT
+  LWOP
+  PTO
+  PERSONAL_HOLIDAY
+  HOLIDAY
+  JURY_DUTY
+  MATERNITY
+  PATERNITY
+  MILITARY
+  OTHERS
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -65,13 +104,13 @@ enum AuditEntityType {
 }
 
 model LineOfBusiness {
-  id          Int                 @id @default(autoincrement())
-  code        LineOfBusinessCode  @unique
-  name        String              @db.VarChar(100)
-  createdAt   DateTime            @default(now())
+  id        Int                @id @default(autoincrement())
+  code      LineOfBusinessCode @unique
+  name      String             @db.VarChar(100)
+  createdAt DateTime           @default(now())
 
-  employees        Employee[]
-  userAccess       UserLineOfBusiness[]
+  employees  Employee[]
+  userAccess UserLineOfBusiness[]
 
   @@map("lines_of_business")
 }
@@ -98,40 +137,45 @@ model User {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  lineOfBusinessAccess  UserLineOfBusiness[]
-  passwordResets        PasswordReset[]
-  auditLogs             AuditLog[]           @relation("AuditActor")
-  approvedTimesheets    Timesheet[]          @relation("TimesheetApprover")
-  employeesCreated      Employee[]           @relation("EmployeeCreatedBy")
-  schedulesCreated      EmployeeSchedule[]   @relation("ScheduleCreatedBy")
+  lineOfBusinessAccess    UserLineOfBusiness[]
+  passwordResets          PasswordReset[]
+  auditLogs               AuditLog[]           @relation("AuditActor")
+  approvedTimesheets      Timesheet[]          @relation("TimesheetApprover")
+  employeesCreated        Employee[]           @relation("EmployeeCreatedBy")
+  schedulesCreated        EmployeeSchedule[]   @relation("ScheduleCreatedBy")
+  timesheetEntriesCreated TimesheetEntry[]     @relation("TimesheetEntryCreatedBy")
+  timesheetEntriesUpdated TimesheetEntry[]     @relation("TimesheetEntryUpdatedBy")
 
   @@map("users")
 }
 
-// Many-to-many: a supervisor may be assigned to one or more lines of business.
+// Many-to-many: a supervisor may be assigned to one or more lines of
+// business. This only grants VIEW access to employees/schedules/timesheets
+// and the ability to record actual time worked - supervisors can never
+// add/edit/delete employees or modify schedules, regardless of this
+// assignment; that remains administrator-only.
 model UserLineOfBusiness {
-  id               Int             @id @default(autoincrement())
+  id               Int      @id @default(autoincrement())
   userId           Int
   lineOfBusinessId Int
-  canAddEmployees  Boolean         @default(false)
-  createdAt        DateTime        @default(now())
+  createdAt        DateTime @default(now())
 
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lineOfBusiness   LineOfBusiness  @relation(fields: [lineOfBusinessId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lineOfBusiness LineOfBusiness @relation(fields: [lineOfBusinessId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lineOfBusinessId])
   @@map("user_lines_of_business")
 }
 
 model PasswordReset {
-  id         Int       @id @default(autoincrement())
-  userId     Int
-  codeHash   String    @db.VarChar(255) // one-time code, hashed at rest
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdAt  DateTime  @default(now())
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  codeHash  String    @db.VarChar(255) // one-time code, hashed at rest
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("password_resets")
@@ -141,25 +185,25 @@ model PasswordReset {
 // (name, contact info, hire date). Scheduling data lives in EmployeeSchedule
 // as effective-dated rows so history is preserved.
 model Employee {
-  id                Int              @id @default(autoincrement())
-  employeeCode      String           @unique @db.VarChar(50) // "Employee ID" business key
-  dateOfHire        DateTime
-  firstName         String           @db.VarChar(100)
-  lastName          String           @db.VarChar(100)
-  phoneNumber       String           @db.VarChar(30)
-  lineOfBusinessId  Int
-  status            EmployeeStatus   @default(ACTIVE)
-  createdById       Int?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  archivedAt        DateTime?
+  id               Int            @id @default(autoincrement())
+  employeeCode     String         @unique @db.VarChar(50) // "Employee ID" business key
+  dateOfHire       DateTime
+  firstName        String         @db.VarChar(100)
+  lastName         String         @db.VarChar(100)
+  phoneNumber      String         @db.VarChar(30)
+  lineOfBusinessId Int
+  status           EmployeeStatus @default(ACTIVE)
+  createdById      Int?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  archivedAt       DateTime?
 
-  lineOfBusiness    LineOfBusiness   @relation(fields: [lineOfBusinessId], references: [id])
-  createdBy         User?            @relation("EmployeeCreatedBy", fields: [createdById], references: [id])
+  lineOfBusiness LineOfBusiness @relation(fields: [lineOfBusinessId], references: [id])
+  createdBy      User?          @relation("EmployeeCreatedBy", fields: [createdById], references: [id])
 
-  schedules         EmployeeSchedule[]
-  timesheets        Timesheet[]
-  customFields      EmployeeCustomFieldValue[]
+  schedules    EmployeeSchedule[]
+  timesheets   Timesheet[]
+  customFields EmployeeCustomFieldValue[]
 
   @@index([lineOfBusinessId])
   @@map("employees")
@@ -168,27 +212,27 @@ model Employee {
 // Extensible custom fields so new employee attributes can be added
 // without schema migrations for every new requirement.
 model CustomFieldDefinition {
-  id          Int      @id @default(autoincrement())
-  fieldKey    String   @unique @db.VarChar(100)
-  label       String   @db.VarChar(150)
-  fieldType   String   @db.VarChar(30) // text, number, date, boolean, select
-  options     String?  @db.Text // JSON-encoded options for "select" type
-  createdAt   DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  fieldKey  String   @unique @db.VarChar(100)
+  label     String   @db.VarChar(150)
+  fieldType String   @db.VarChar(30) // text, number, date, boolean, select
+  options   String?  @db.Text // JSON-encoded options for "select" type
+  createdAt DateTime @default(now())
 
-  values      EmployeeCustomFieldValue[]
+  values EmployeeCustomFieldValue[]
 
   @@map("custom_field_definitions")
 }
 
 model EmployeeCustomFieldValue {
-  id           Int      @id @default(autoincrement())
-  employeeId   Int
-  fieldId      Int
-  value        String?  @db.Text
-  updatedAt    DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  fieldId    Int
+  value      String?  @db.Text
+  updatedAt  DateTime @updatedAt
 
-  employee     Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  field        CustomFieldDefinition  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  employee Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  field    CustomFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, fieldId])
   @@map("employee_custom_field_values")
@@ -198,20 +242,20 @@ model EmployeeCustomFieldValue {
 // change; existing rows are never overwritten. Historical reports resolve
 // the correct row by matching the report date against [effectiveDate, endDate).
 model EmployeeSchedule {
-  id                Int               @id @default(autoincrement())
-  employeeId        Int
-  employmentStatus  EmploymentStatus
-  shiftStartTime    String            @db.VarChar(5) // "HH:MM" 24h local
-  shiftEndTime      String            @db.VarChar(5) // "HH:MM" 24h local; may cross midnight
-  daysOff           String            @db.VarChar(100) // comma-separated: MON,TUE,...
-  effectiveDate     DateTime
-  endDate           DateTime?         // set automatically when superseded; null = current
-  notes             String?           @db.Text
-  createdById       Int?
-  createdAt         DateTime          @default(now())
+  id               Int              @id @default(autoincrement())
+  employeeId       Int
+  employmentStatus EmploymentStatus
+  shiftStartTime   String           @db.VarChar(5) // "HH:MM" 24h local
+  shiftEndTime     String           @db.VarChar(5) // "HH:MM" 24h local; may cross midnight
+  daysOff          String           @db.VarChar(100) // comma-separated: MON,TUE,...
+  effectiveDate    DateTime
+  endDate          DateTime? // set automatically when superseded; null = current
+  notes            String?          @db.Text
+  createdById      Int?
+  createdAt        DateTime         @default(now())
 
-  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  createdBy         User?             @relation("ScheduleCreatedBy", fields: [createdById], references: [id])
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("ScheduleCreatedBy", fields: [createdById], references: [id])
 
   @@index([employeeId, effectiveDate])
   @@map("employee_schedules")
@@ -221,59 +265,88 @@ model EmployeeSchedule {
 // (the app's canonical period is biweekly, but weekly/monthly/custom
 // reporting is derived from the same TimesheetEntry rows).
 model Timesheet {
-  id              Int              @id @default(autoincrement())
-  employeeId      Int
-  periodStart     DateTime
-  periodEnd       DateTime
-  status          TimesheetStatus  @default(OPEN)
-  approvedById    Int?
-  approvedAt      DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id           Int             @id @default(autoincrement())
+  employeeId   Int
+  periodStart  DateTime
+  periodEnd    DateTime
+  status       TimesheetStatus @default(OPEN)
+  approvedById Int?
+  approvedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
-  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  approvedBy      User?            @relation("TimesheetApprover", fields: [approvedById], references: [id])
-  entries         TimesheetEntry[]
+  employee   Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approvedBy User?            @relation("TimesheetApprover", fields: [approvedById], references: [id])
+  entries    TimesheetEntry[]
 
   @@unique([employeeId, periodStart, periodEnd])
   @@index([employeeId, periodStart])
   @@map("timesheets")
 }
 
-// A single day's worked time. clockIn/clockOut are stored as full
-// timestamps (so overnight shifts resolve unambiguously); decimalHours
-// is precomputed and persisted for fast, consistent reporting, but can
+// A single day's timesheet entry. Scheduled and Actual times are kept as
+// two independent pairs of columns so the record always shows what the
+// employee was scheduled to work, separately from what a supervisor
+// recorded as actually worked - the scheduled columns are populated once
+// (from the employee's schedule, via "Add Day") and are never overwritten
+// by later edits to the actual times.
+//
+// clockIn/clockOut are stored as full UTC timestamps (so overnight shifts
+// resolve unambiguously); regularHours/otHours/decimalHours are
+// precomputed and persisted for fast, consistent reporting, but can
 // always be recomputed from the raw times + break minutes.
 model TimesheetEntry {
-  id               Int        @id @default(autoincrement())
-  timesheetId      Int
-  workDate         DateTime   // the shift's "belongs to" date, per business rule
-  clockIn          DateTime
-  clockOut         DateTime
-  unpaidBreakMins  Int        @default(0)
-  decimalHours     Decimal    @db.Decimal(6, 2)
-  notes            String?    @db.Text
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id          Int      @id @default(autoincrement())
+  timesheetId Int
+  workDate    DateTime // the shift's "belongs to" date, per business rule
 
-  timesheet        Timesheet  @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  // Scheduled shift, snapshotted from EmployeeSchedule when the day was added.
+  scheduledClockIn  DateTime?
+  scheduledClockOut DateTime?
 
+  // What the employee actually worked (editable by a supervisor).
+  clockIn         DateTime
+  clockOut        DateTime
+  unpaidBreakMins Int      @default(0)
+
+  // Derived from clockIn/clockOut/unpaidBreakMins vs. the scheduled shift;
+  // regularHours + otHours == decimalHours.
+  regularHours Decimal @db.Decimal(6, 2)
+  otHours      Decimal @default(0) @db.Decimal(6, 2)
+  decimalHours Decimal @db.Decimal(6, 2)
+
+  attendanceAdjustment AttendanceAdjustment @default(NONE)
+  supplementalType     SupplementalTimeType @default(NONE)
+  supplementalHours    Decimal              @default(0) @db.Decimal(6, 2)
+  timeType             TimeType             @default(REGULAR_SHIFT)
+
+  notes       String?  @db.Text
+  createdById Int?
+  updatedById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("TimesheetEntryCreatedBy", fields: [createdById], references: [id])
+  updatedBy User?     @relation("TimesheetEntryUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([timesheetId, workDate])
   @@index([timesheetId, workDate])
   @@map("timesheet_entries")
 }
 
 model AuditLog {
-  id            Int              @id @default(autoincrement())
+  id            Int             @id @default(autoincrement())
   actorUserId   Int?
   action        AuditAction
   entityType    AuditEntityType
   entityId      Int
-  employeeId    Int?             // convenience denormalization for employee-scoped queries
-  previousValue String?          @db.Text // JSON snapshot
-  newValue      String?          @db.Text // JSON snapshot
-  createdAt     DateTime         @default(now())
+  employeeId    Int? // convenience denormalization for employee-scoped queries
+  previousValue String?         @db.Text // JSON snapshot
+  newValue      String?         @db.Text // JSON snapshot
+  createdAt     DateTime        @default(now())
 
-  actor         User?            @relation("AuditActor", fields: [actorUserId], references: [id])
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id])
 
   @@index([entityType, entityId])
   @@index([employeeId])

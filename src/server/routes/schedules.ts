@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
-import { assertLineOfBusinessAccess, requireAuth } from "../middleware/auth";
+import { assertLineOfBusinessAccess, requireAdministrator, requireAuth } from "../middleware/auth";
 import { recordAudit } from "../services/audit";
 
 export const schedulesRouter = Router();
@@ -83,8 +83,10 @@ const newScheduleSchema = z.object({
 // Create a NEW effective-dated schedule row. This never edits or deletes
 // prior rows — it closes out the previously-open row (sets endDate) and
 // inserts a new one, preserving full history per the historical-data
-// requirement.
-schedulesRouter.post("/employee/:employeeId", async (req, res) => {
+// requirement. Modifying an employee's schedule is master-data
+// maintenance, so only administrators may do it - supervisors can view
+// schedules but not change them.
+schedulesRouter.post("/employee/:employeeId", requireAdministrator, async (req, res) => {
   const employeeId = Number(req.params.employeeId);
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return res.status(404).json({ error: "Employee not found" });

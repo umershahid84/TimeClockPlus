@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
-import { assertLineOfBusinessAccess, requireAuth } from "../middleware/auth";
+import { assertLineOfBusinessAccess, requireAdministrator, requireAuth } from "../middleware/auth";
 import { recordAudit } from "../services/audit";
 
 export const employeesRouter = Router();
@@ -58,22 +58,15 @@ const createEmployeeSchema = z.object({
   effectiveDate: z.coerce.date(),
 });
 
-async function assertCanAddEmployees(user: NonNullable<Express.Request["user"]>, lineOfBusinessId: number) {
-  if (user.isAdministrator) return true;
-  const access = await prisma.userLineOfBusiness.findUnique({
-    where: { userId_lineOfBusinessId: { userId: user.id, lineOfBusinessId } },
-  });
-  return Boolean(access?.canAddEmployees);
-}
-
-employeesRouter.post("/", async (req, res) => {
+// Adding, editing, archiving, and removing employees - and modifying their
+// schedules or other master information - is an administrator-only action.
+// Supervisors may view employees, schedules, and timesheets for their
+// assigned line(s) of business, and record actual time worked, but they
+// cannot touch the employee/schedule master records themselves.
+employeesRouter.post("/", requireAdministrator, async (req, res) => {
   const parsed = createEmployeeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const data = parsed.data;
-
-  if (!(await assertCanAddEmployees(req.user!, data.lineOfBusinessId))) {
-    return res.status(403).json({ error: "Not authorized to add employees for this line of business" });
-  }
 
   const employee = await prisma.employee.create({
     data: {
@@ -116,13 +109,10 @@ const updateEmployeeSchema = z.object({
   phoneNumber: z.string().min(1).optional(),
 });
 
-employeesRouter.put("/:id", async (req, res) => {
+employeesRouter.put("/:id", requireAdministrator, async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.employee.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Employee not found" });
-  if (!assertLineOfBusinessAccess(req.user!, existing.lineOfBusinessId)) {
-    return res.status(403).json({ error: "Not authorized for this line of business" });
-  }
   const parsed = updateEmployeeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -139,13 +129,10 @@ employeesRouter.put("/:id", async (req, res) => {
   res.json(updated);
 });
 
-employeesRouter.post("/:id/archive", async (req, res) => {
+employeesRouter.post("/:id/archive", requireAdministrator, async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.employee.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Employee not found" });
-  if (!assertLineOfBusinessAccess(req.user!, existing.lineOfBusinessId)) {
-    return res.status(403).json({ error: "Not authorized for this line of business" });
-  }
   const updated = await prisma.employee.update({
     where: { id },
     data: { status: "ARCHIVED", archivedAt: new Date() },
@@ -162,13 +149,10 @@ employeesRouter.post("/:id/archive", async (req, res) => {
   res.json(updated);
 });
 
-employeesRouter.delete("/:id", async (req, res) => {
+employeesRouter.delete("/:id", requireAdministrator, async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.employee.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Employee not found" });
-  if (!req.user!.isAdministrator) {
-    return res.status(403).json({ error: "Only administrators may remove employees" });
-  }
   const updated = await prisma.employee.update({ where: { id }, data: { status: "REMOVED" } });
   await recordAudit({
     actorUserId: req.user!.id,

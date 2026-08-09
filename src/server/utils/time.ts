@@ -34,7 +34,8 @@ export function resolveShiftTimes(
   return { start, end };
 }
 
-function combineDateAndTime(date: Date, hhmm: string): Date {
+/** Exported for callers (e.g. timesheet entry edits) that need to combine a work date with a single HH:MM time. */
+export function combineDateAndTime(date: Date, hhmm: string): Date {
   const [hours, minutes] = parseHHMM(hhmm);
   const result = new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), hours, minutes, 0, 0)
@@ -75,6 +76,25 @@ export function calculateDecimalHours(
 export function sumDecimalHours(hours: number[], precision: number = DEFAULT_PRECISION): number {
   const total = hours.reduce((acc, h) => acc + h, 0);
   return roundTo(total, precision);
+}
+
+/**
+ * Split actual worked hours into Regular vs. Overtime relative to the
+ * scheduled shift length: hours up to the scheduled length are Regular,
+ * anything beyond it is OT. If there is no scheduled shift to compare
+ * against, all worked time is treated as Regular (OT can't be determined).
+ */
+export function splitRegularAndOvertime(
+  workedHours: number,
+  scheduledHours: number | null,
+  precision: number = DEFAULT_PRECISION
+): { regularHours: number; otHours: number } {
+  if (scheduledHours === null || scheduledHours <= 0) {
+    return { regularHours: roundTo(workedHours, precision), otHours: 0 };
+  }
+  const regularHours = roundTo(Math.min(workedHours, scheduledHours), precision);
+  const otHours = roundTo(Math.max(0, workedHours - scheduledHours), precision);
+  return { regularHours, otHours };
 }
 
 export const DAY_CODES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const;

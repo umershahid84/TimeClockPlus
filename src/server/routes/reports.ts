@@ -4,6 +4,7 @@ import { prisma } from "../config/prisma";
 import { assertLineOfBusinessAccess, requireAuth } from "../middleware/auth";
 import { resolveScheduleForDate } from "./schedules";
 import { sumDecimalHours } from "../utils/time";
+import { formatLocalDate, formatLocalTime } from "../utils/timezone";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
@@ -18,7 +19,8 @@ function parseDateRange(req: import("express").Request) {
 /**
  * Schedule report: for each day in the range, resolves the schedule that was
  * ACTUALLY in effect on that date (not just the employee's current schedule),
- * per the historical-data requirement.
+ * per the historical-data requirement. All dates/times are rendered in the
+ * organization's local wall-clock convention - never a raw ISO/UTC value.
  */
 reportsRouter.get("/schedule", async (req, res) => {
   const range = parseDateRange(req);
@@ -64,8 +66,8 @@ reportsRouter.get("/schedule", async (req, res) => {
         firstName: employee.firstName,
         lastName: employee.lastName,
         lineOfBusiness: employee.lineOfBusiness.name,
-        segmentStart: segmentStart.toISOString().slice(0, 10),
-        segmentEnd: segmentEnd.toISOString().slice(0, 10),
+        segmentStart: formatLocalDate(segmentStart),
+        segmentEnd: formatLocalDate(segmentEnd),
         employmentStatus: schedule.employmentStatus,
         shiftStartTime: schedule.shiftStartTime,
         shiftEndTime: schedule.shiftEndTime,
@@ -80,8 +82,8 @@ reportsRouter.get("/schedule", async (req, res) => {
           firstName: employee.firstName,
           lastName: employee.lastName,
           lineOfBusiness: employee.lineOfBusiness.name,
-          segmentStart: range.start.toISOString().slice(0, 10),
-          segmentEnd: range.end.toISOString().slice(0, 10),
+          segmentStart: formatLocalDate(range.start),
+          segmentEnd: formatLocalDate(range.end),
           employmentStatus: current.employmentStatus,
           shiftStartTime: current.shiftStartTime,
           shiftEndTime: current.shiftEndTime,
@@ -100,7 +102,37 @@ reportsRouter.get("/schedule", async (req, res) => {
   res.json(rows);
 });
 
-/** Timesheet/payroll report: biweekly-friendly, decimal hours throughout. */
+const ATTENDANCE_LABELS: Record<string, string> = {
+  NONE: "",
+  TARDY: "Tardy",
+  LEFT_EARLY: "Left Early",
+  ARRIVED_LATE: "Arrived Late",
+};
+
+const TIME_TYPE_LABELS: Record<string, string> = {
+  REGULAR_SHIFT: "Regular Shift",
+  SICK: "Sick",
+  FCA: "FCA",
+  FMLA: "FMLA",
+  NO_CALL_NO_SHOW: "No Call - No Show",
+  BEREAVEMENT: "Bereavement",
+  LWOP: "LWOP",
+  PTO: "PTO",
+  PERSONAL_HOLIDAY: "Personal Holiday",
+  HOLIDAY: "Holiday",
+  JURY_DUTY: "Jury Duty",
+  MATERNITY: "Maternity",
+  PATERNITY: "Paternity",
+  MILITARY: "Military",
+  OTHERS: "Others",
+};
+
+/**
+ * Timesheet/payroll report: biweekly-friendly, decimal hours throughout,
+ * with Scheduled vs. Actual, Regular/OT split, attendance adjustment, and
+ * supplemental time all broken out per day. All clock times are rendered
+ * in local wall-clock form - never UTC/Zulu.
+ */
 reportsRouter.get("/timesheet", async (req, res) => {
   const range = parseDateRange(req);
   if (!range) return res.status(400).json({ error: "start and end query params are required" });
@@ -123,7 +155,7 @@ reportsRouter.get("/timesheet", async (req, res) => {
       lineOfBusiness: true,
       timesheets: {
         where: { periodStart: { gte: range.start }, periodEnd: { lte: range.end } },
-        include: { entries: true },
+        include: { entries: { orderBy: { workDate: "asc" } } },
       },
     },
   });
@@ -137,26 +169,45 @@ reportsRouter.get("/timesheet", async (req, res) => {
           firstName: employee.firstName,
           lastName: employee.lastName,
           lineOfBusiness: employee.lineOfBusiness.name,
-          workDate: entry.workDate.toISOString().slice(0, 10),
-          clockIn: entry.clockIn.toISOString(),
-          clockOut: entry.clockOut.toISOString(),
+          workDate: formatLocalDate(entry.workDate),
+          scheduledClockIn: formatLocalTime(entry.scheduledClockIn),
+          scheduledClockOut: formatLocalTime(entry.scheduledClockOut),
+          actualClockIn: formatLocalTime(entry.clockIn),
+          actualClockOut: formatLocalTime(entry.clockOut),
           unpaidBreakMins: entry.unpaidBreakMins,
-          decimalHours: Number(entry.decimalHours),
+          regularHours: Number(entry.regularHours),
+          otHours: Number(entry.otHours),
+          totalWorkedHours: Number(entry.decimalHours),
+          attendanceAdjustment: ATTENDANCE_LABELS[entry.attendanceAdjustment] ?? entry.attendanceAdjustment,
+          supplementalType: entry.supplementalType === "NONE" ? "" : entry.supplementalType,
+          supplementalHours: Number(entry.supplementalHours),
+          timeType: TIME_TYPE_LABELS[entry.timeType] ?? entry.timeType,
           notes: entry.notes ?? "",
         });
       }
-      const total = sumDecimalHours(timesheet.entries.map((e) => Number(e.decimalHours)));
+      const totalRegular = sumDecimalHours(timesheet.entries.map((e) => Number(e.regularHours)));
+      const totalOt = sumDecimalHours(timesheet.entries.map((e) => Number(e.otHours)));
+      const totalWorked = sumDecimalHours(timesheet.entries.map((e) => Number(e.decimalHours)));
+      const totalSupplemental = sumDecimalHours(timesheet.entries.map((e) => Number(e.supplementalHours)));
       rows.push({
         employeeCode: employee.employeeCode,
         firstName: employee.firstName,
         lastName: employee.lastName,
         lineOfBusiness: employee.lineOfBusiness.name,
-        workDate: "TOTAL",
-        clockIn: "",
-        clockOut: "",
+        workDate: `TOTAL (Pay Period ${formatLocalDate(timesheet.periodStart)} - ${formatLocalDate(timesheet.periodEnd)}, ${timesheet.status})`,
+        scheduledClockIn: "",
+        scheduledClockOut: "",
+        actualClockIn: "",
+        actualClockOut: "",
         unpaidBreakMins: "",
-        decimalHours: total,
-        notes: `Period ${timesheet.periodStart.toISOString().slice(0, 10)} - ${timesheet.periodEnd.toISOString().slice(0, 10)} (${timesheet.status})`,
+        regularHours: totalRegular,
+        otHours: totalOt,
+        totalWorkedHours: totalWorked,
+        attendanceAdjustment: "",
+        supplementalType: "",
+        supplementalHours: totalSupplemental,
+        timeType: "",
+        notes: "",
       });
     }
   }

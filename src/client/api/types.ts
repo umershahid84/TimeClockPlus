@@ -29,22 +29,58 @@ export interface EmployeeSchedule {
   notes?: string | null;
 }
 
+export type AttendanceAdjustment = "NONE" | "TARDY" | "LEFT_EARLY" | "ARRIVED_LATE";
+export type SupplementalTimeType = "NONE" | "SICK" | "PTO" | "FCA" | "FMLA" | "LWOP";
+export type TimeType =
+  | "REGULAR_SHIFT"
+  | "SICK"
+  | "FCA"
+  | "FMLA"
+  | "NO_CALL_NO_SHOW"
+  | "BEREAVEMENT"
+  | "LWOP"
+  | "PTO"
+  | "PERSONAL_HOLIDAY"
+  | "HOLIDAY"
+  | "JURY_DUTY"
+  | "MATERNITY"
+  | "PATERNITY"
+  | "MILITARY"
+  | "OTHERS";
+
 export interface TimesheetEntry {
-  id?: number;
+  id: number;
+  timesheetId: number;
   workDate: string;
+  scheduledClockIn: string | null;
+  scheduledClockOut: string | null;
   clockIn: string;
   clockOut: string;
   unpaidBreakMins: number;
-  decimalHours?: number;
-  notes?: string;
+  regularHours: number;
+  otHours: number;
+  decimalHours: number;
+  attendanceAdjustment: AttendanceAdjustment;
+  supplementalType: SupplementalTimeType;
+  supplementalHours: number;
+  timeType: TimeType;
+  notes: string | null;
 }
 
-export interface Timesheet {
-  id?: number;
+export interface PayPeriodTotals {
+  regularHours: number;
+  otHours: number;
+  supplementalHours: number;
+  totalWorked: number;
+  totalCredited: number;
+}
+
+export interface PayPeriodTimesheet {
   employeeId: number;
   periodStart: string;
   periodEnd: string;
+  timesheetId: number | null;
   status: "OPEN" | "SUBMITTED" | "APPROVED" | "REJECTED";
   entries: TimesheetEntry[];
-  totalHours: number;
+  totals: PayPeriodTotals;
 }

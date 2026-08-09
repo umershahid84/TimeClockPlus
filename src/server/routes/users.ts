@@ -30,7 +30,6 @@ usersRouter.get("/", async (_req, res) => {
         id: a.lineOfBusiness.id,
         code: a.lineOfBusiness.code,
         name: a.lineOfBusiness.name,
-        canAddEmployees: a.canAddEmployees,
       })),
     }))
   );
@@ -42,7 +41,6 @@ const createSupervisorSchema = z.object({
   lastName: z.string().min(1),
   email: z.string().email(),
   lineOfBusinessIds: z.array(z.number().int()).min(1),
-  canAddEmployees: z.boolean().default(false),
   grantAdministrator: z.boolean().default(false),
 });
 
@@ -69,10 +67,7 @@ usersRouter.post("/supervisors", async (req, res) => {
       mustChangePassword: true,
       tempPasswordExpiresAt: new Date(Date.now() + env.tempPasswordExpiryHours * 60 * 60 * 1000),
       lineOfBusinessAccess: {
-        create: data.lineOfBusinessIds.map((lineOfBusinessId) => ({
-          lineOfBusinessId,
-          canAddEmployees: data.canAddEmployees,
-        })),
+        create: data.lineOfBusinessIds.map((lineOfBusinessId) => ({ lineOfBusinessId })),
       },
     },
     include: { lineOfBusinessAccess: true },
@@ -112,7 +107,6 @@ usersRouter.post("/:id/administrator", async (req, res) => {
 
 const updateAccessSchema = z.object({
   lineOfBusinessIds: z.array(z.number().int()),
-  canAddEmployees: z.boolean().default(false),
   canViewAllLinesOfBiz: z.boolean().optional(),
 });
 
@@ -126,11 +120,7 @@ usersRouter.put("/:id/access", async (req, res) => {
   await prisma.$transaction([
     prisma.userLineOfBusiness.deleteMany({ where: { userId: id } }),
     prisma.userLineOfBusiness.createMany({
-      data: parsed.data.lineOfBusinessIds.map((lineOfBusinessId) => ({
-        userId: id,
-        lineOfBusinessId,
-        canAddEmployees: parsed.data.canAddEmployees,
-      })),
+      data: parsed.data.lineOfBusinessIds.map((lineOfBusinessId) => ({ userId: id, lineOfBusinessId })),
     }),
     ...(parsed.data.canViewAllLinesOfBiz !== undefined
       ? [prisma.user.update({ where: { id }, data: { canViewAllLinesOfBiz: parsed.data.canViewAllLinesOfBiz } })]

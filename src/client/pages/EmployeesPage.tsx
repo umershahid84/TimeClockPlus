@@ -67,12 +67,14 @@ export function EmployeesPage() {
     <div>
       <div className="topbar">
         <h2>Employees</h2>
-        <button className="btn" onClick={() => setShowForm((s) => !s)}>
-          {showForm ? "Cancel" : "Add Employee"}
-        </button>
+        {user?.isAdministrator && (
+          <button className="btn" onClick={() => setShowForm((s) => !s)}>
+            {showForm ? "Cancel" : "Add Employee"}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && user?.isAdministrator && (
         <div className="card">
           <form onSubmit={handleSubmit}>
             <div className="grid grid-4">
@@ -156,7 +158,7 @@ export function EmployeesPage() {
                 <td>{emp.firstName} {emp.lastName}</td>
                 <td>{emp.lineOfBusiness?.name}</td>
                 <td>{emp.status}</td>
-                <td><Link to={`/employees/${emp.id}`}>View / Edit</Link></td>
+                <td><Link to={`/employees/${emp.id}`}>View</Link></td>
               </tr>
             ))}
             {employees.length === 0 && (

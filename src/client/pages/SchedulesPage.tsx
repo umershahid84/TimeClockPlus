@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Employee, EmployeeSchedule, LineOfBusiness } from "../api/types";
+import { formatDate } from "../utils/time";
 
 interface BoardRow {
   employee: Employee;
@@ -63,7 +64,7 @@ export function SchedulesPage() {
                 <td>{schedule ? (schedule.employmentStatus === "FULL_TIME" ? "Full-Time" : "Part-Time") : "—"}</td>
                 <td>{schedule ? `${schedule.shiftStartTime} - ${schedule.shiftEndTime}` : "No schedule"}</td>
                 <td>{schedule?.daysOff ?? "—"}</td>
-                <td>{schedule ? new Date(schedule.effectiveDate).toLocaleDateString() : "—"}</td>
+                <td>{schedule ? formatDate(schedule.effectiveDate) : "—"}</td>
               </tr>
             ))}
             {rows.length === 0 && <tr><td colSpan={6} className="muted">No employees found.</td></tr>}

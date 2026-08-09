@@ -76,4 +76,15 @@ export const env = {
   appBaseUrl: process.env.APP_BASE_URL ?? "http://localhost:5173",
 
   decimalHoursPrecision: Number(process.env.DECIMAL_HOURS_PRECISION ?? 2),
+
+  // IANA timezone the organization operates in. All times shown to users
+  // (UI, reports, exports, audit logs) are converted to this timezone -
+  // never displayed as UTC/Zulu. Timestamps are still stored in UTC.
+  appTimezone: process.env.APP_TIMEZONE ?? "America/Los_Angeles",
+
+  // Any Sunday that starts a real pay period. Every other pay period is
+  // computed as a 14-day offset from this anchor (Sunday-Saturday, 14
+  // days long), so the anchor only needs to be a known-correct reference
+  // point, not the current period.
+  payPeriodAnchor: process.env.PAY_PERIOD_ANCHOR ?? "2026-07-26",
 };
