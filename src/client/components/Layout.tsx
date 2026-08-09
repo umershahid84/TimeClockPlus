@@ -17,7 +17,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className="sidebar no-print">
         <h1>TimeClockPlus</h1>
         <nav>
           {NAV_ITEMS.filter((item) => !item.adminOnly || user?.isAdministrator).map((item) => (
@@ -28,7 +28,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </nav>
       </aside>
       <div className="main">
-        <div className="topbar">
+        <div className="topbar no-print">
           <div>
             <strong>{user?.firstName} {user?.lastName}</strong>{" "}
             <span className="badge">{user?.isAdministrator ? "Administrator" : "Supervisor"}</span>

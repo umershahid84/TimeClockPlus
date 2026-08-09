@@ -259,14 +259,14 @@ export function TimesheetsPage() {
           </div>
 
           {period && (
-            <div className="card">
+            <div className="card print-area">
               <div className="topbar">
                 <div>
                   <div className="muted">Pay Period</div>
                   <h3 style={{ margin: "0.2rem 0" }}>{formatDate(period.periodStart)} &ndash; {formatDate(period.periodEnd)}</h3>
                   <span className="badge">{period.status}</span>
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div className="no-print" style={{ display: "flex", gap: "0.5rem" }}>
                   <button className="btn secondary" onClick={() => navigate(-1)}>&larr; Previous Period</button>
                   <button className="btn secondary" onClick={() => navigate(1)}>Next Period &rarr;</button>
                   <button className="btn secondary" onClick={() => window.print()}>Print</button>
@@ -274,7 +274,7 @@ export function TimesheetsPage() {
               </div>
 
               {canEdit && (
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", margin: "1rem 0" }}>
+                <div className="no-print" style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", margin: "1rem 0" }}>
                   <div className="field" style={{ marginBottom: 0 }}>
                     <label>Date</label>
                     <input
@@ -295,7 +295,7 @@ export function TimesheetsPage() {
                   <thead>
                     <tr>
                       <th>Date</th><th>Scheduled</th><th>Actual</th><th>Regular</th><th>OT</th>
-                      <th>Attendance</th><th>Supplemental</th><th>Time Type</th><th></th>
+                      <th>Attendance</th><th>Supplemental</th><th>Time Type</th><th className="no-print"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -309,7 +309,7 @@ export function TimesheetsPage() {
                         <td>{ATTENDANCE_OPTIONS.find((o) => o.value === entry.attendanceAdjustment)?.label ?? "—"}</td>
                         <td>{entry.supplementalType !== "NONE" ? `${entry.supplementalType} ${entry.supplementalHours.toFixed(2)}` : "—"}</td>
                         <td>{TIME_TYPE_OPTIONS.find((o) => o.value === entry.timeType)?.label}</td>
-                        <td style={{ whiteSpace: "nowrap" }}>
+                        <td className="no-print" style={{ whiteSpace: "nowrap" }}>
                           {canEdit && (
                             <>
                               <button className="btn secondary" onClick={() => setEditingEntry(entry)}>Edit</button>{" "}
@@ -333,7 +333,7 @@ export function TimesheetsPage() {
                 <div><div className="muted">Total Credited</div><strong>{period.totals.totalCredited.toFixed(2)}</strong></div>
               </div>
 
-              <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
+              <div className="no-print" style={{ marginTop: "1rem", display: "flex", gap: "0.5rem" }}>
                 {period.status === "OPEN" && period.timesheetId && (
                   <button className="btn" onClick={submitTimesheet}>Submit Timesheet</button>
                 )}

@@ -40,12 +40,48 @@ export function ReportsPage() {
       });
   }
 
+  const reportTitle = reportType === "schedule" ? "Schedule Report" : "Timesheet / Payroll Report";
+  const lineOfBusinessName = lines.find((l) => String(l.id) === lineOfBusinessId)?.name ?? "All authorized";
+
+  // Exports only the report itself (title + table), not the surrounding
+  // app chrome - built directly from the current result set rather than
+  // by capturing any part of the page, and always in landscape since
+  // every report here is a wide data table. jsPDF/autotable are loaded
+  // on demand (they're a large dependency) so they don't bloat the
+  // initial bundle for users who never export a PDF.
+  async function downloadPdf() {
+    if (rows.length === 0) return;
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "letter" });
+    const columns = Object.keys(rows[0]);
+
+    doc.setFontSize(14);
+    doc.text(reportTitle, 40, 40);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`${start} to ${end}  ·  ${lineOfBusinessName}`, 40, 58);
+
+    autoTable(doc, {
+      startY: 72,
+      head: [columns],
+      body: rows.map((row) => columns.map((c) => String(row[c] ?? ""))),
+      styles: { fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [30, 58, 95] },
+      margin: { left: 40, right: 40 },
+    });
+
+    doc.save(`${reportType}-report.pdf`);
+  }
+
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
   return (
     <div>
-      <h2>Reports</h2>
-      <div className="card grid grid-4">
+      <div className="topbar no-print">
+        <h2>Reports</h2>
+      </div>
+      <div className="card grid grid-4 no-print">
         <div className="field">
           <label>Report Type</label>
           <select value={reportType} onChange={(e) => setReportType(e.target.value as "schedule" | "timesheet")}>
@@ -71,13 +107,18 @@ export function ReportsPage() {
           <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
         </div>
       </div>
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+      <div className="no-print" style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
         <button className="btn" onClick={runReport}>Run Report</button>
-        <button className="btn secondary" onClick={downloadCsv}>Export CSV</button>
-        <button className="btn secondary" onClick={() => window.print()}>Print</button>
+        <button className="btn secondary" onClick={downloadCsv} disabled={rows.length === 0}>Export CSV</button>
+        <button className="btn secondary" onClick={downloadPdf} disabled={rows.length === 0}>Export PDF</button>
+        <button className="btn secondary" onClick={() => window.print()} disabled={rows.length === 0}>Print</button>
       </div>
 
-      <div className="card table-wrap">
+      <div className="card table-wrap print-area">
+        <div className="print-only">
+          <h2>{reportTitle}</h2>
+          <p className="muted">{start} to {end} &middot; {lineOfBusinessName}</p>
+        </div>
         <table>
           <thead>
             <tr>{columns.map((c) => <th key={c}>{c}</th>)}</tr>

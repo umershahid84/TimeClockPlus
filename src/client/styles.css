@@ -276,3 +276,31 @@ label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.3
   .main { padding: 1.25rem; }
   .login-card { padding: 2.25rem 1.75rem; }
 }
+
+/* Printing: only the page's .print-area (a report/table) should ever
+   reach paper - navigation, filters, and action buttons never print,
+   and the page is forced to landscape since every printable view here
+   is a wide data table. Elements outside .print-area, and anything
+   marked .no-print, are hidden; .print-only content (e.g. a report
+   summary header) is hidden on screen and shown only on the page. */
+.print-only { display: none; }
+
+@media print {
+  @page { size: landscape; margin: 12mm; }
+
+  body { background: white; }
+  .no-print { display: none !important; }
+  .print-only { display: block; }
+
+  .print-area, .print-area * { visibility: visible; }
+  body :not(.print-area):not(.print-area *) { visibility: hidden; }
+  .print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    box-shadow: none;
+    border: none;
+  }
+}

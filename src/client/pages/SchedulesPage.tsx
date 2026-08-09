@@ -28,13 +28,15 @@ export function SchedulesPage() {
       .then(setRows);
   }, [lineOfBusinessId, date]);
 
+  const lineOfBusinessName = lines.find((l) => String(l.id) === lineOfBusinessId)?.name ?? "";
+
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar no-print">
         <h2>Schedules</h2>
         <button className="btn secondary" onClick={() => window.print()}>Print</button>
       </div>
-      <div className="card grid grid-4">
+      <div className="card grid grid-4 no-print">
         <div className="field">
           <label>Line of Business</label>
           <select value={lineOfBusinessId} onChange={(e) => setLineOfBusinessId(e.target.value)}>
@@ -49,7 +51,11 @@ export function SchedulesPage() {
         </div>
       </div>
 
-      <div className="card table-wrap">
+      <div className="card table-wrap print-area">
+        <div className="print-only">
+          <h2>Schedule &mdash; {lineOfBusinessName}</h2>
+          <p className="muted">As of {formatDate(date)}</p>
+        </div>
         <table>
           <thead>
             <tr>
