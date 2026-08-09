@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { LineOfBusiness } from "../api/types";
+import { downloadAuthenticated } from "../utils/download";
+import { exportRowsToPdf } from "../utils/pdfExport";
 
 export function ReportsPage() {
   const [lines, setLines] = useState<LineOfBusiness[]>([]);
@@ -22,56 +24,26 @@ export function ReportsPage() {
   }
 
   function downloadCsv() {
-    const token = localStorage.getItem("tcp_token");
     const params = new URLSearchParams({ start, end, format: "csv" });
     if (lineOfBusinessId) params.set("lineOfBusinessId", lineOfBusinessId);
-    const base = import.meta.env.VITE_API_BASE_URL ?? "";
-    fetch(`${base}/api/reports/${reportType}?${params.toString()}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${reportType}-report.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-      });
+    downloadAuthenticated(`/reports/${reportType}?${params.toString()}`, `${reportType}-report.csv`);
   }
 
   const reportTitle = reportType === "schedule" ? "Schedule Report" : "Timesheet / Payroll Report";
   const lineOfBusinessName = lines.find((l) => String(l.id) === lineOfBusinessId)?.name ?? "All authorized";
 
   // Exports only the report itself (title + table), not the surrounding
-  // app chrome - built directly from the current result set rather than
-  // by capturing any part of the page, and always in landscape since
-  // every report here is a wide data table. jsPDF/autotable are loaded
-  // on demand (they're a large dependency) so they don't bloat the
-  // initial bundle for users who never export a PDF.
+  // app chrome - built directly from the current result set, always in
+  // landscape since every report here is a wide data table.
   async function downloadPdf() {
     if (rows.length === 0) return;
-    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "letter" });
-    const columns = Object.keys(rows[0]);
-
-    doc.setFontSize(14);
-    doc.text(reportTitle, 40, 40);
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`${start} to ${end}  ·  ${lineOfBusinessName}`, 40, 58);
-
-    autoTable(doc, {
-      startY: 72,
-      head: [columns],
-      body: rows.map((row) => columns.map((c) => String(row[c] ?? ""))),
-      styles: { fontSize: 8, cellPadding: 4 },
-      headStyles: { fillColor: [30, 58, 95] },
-      margin: { left: 40, right: 40 },
+    await exportRowsToPdf({
+      filename: `${reportType}-report.pdf`,
+      title: reportTitle,
+      subtitle: `${start} to ${end}  ·  ${lineOfBusinessName}`,
+      columns: Object.keys(rows[0]),
+      rows,
     });
-
-    doc.save(`${reportType}-report.pdf`);
   }
 
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];

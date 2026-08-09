@@ -10,6 +10,7 @@ import { EmployeesPage } from "./pages/EmployeesPage";
 import { EmployeeDetailPage } from "./pages/EmployeeDetailPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
 import { TimesheetsPage } from "./pages/TimesheetsPage";
+import { EmployeeTimesheetsPage } from "./pages/EmployeeTimesheetsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -33,6 +34,7 @@ export default function App() {
       <Route path="/employees/:id" element={<ProtectedRoute><EmployeeDetailPage /></ProtectedRoute>} />
       <Route path="/schedules" element={<ProtectedRoute><SchedulesPage /></ProtectedRoute>} />
       <Route path="/timesheets" element={<ProtectedRoute><TimesheetsPage /></ProtectedRoute>} />
+      <Route path="/employee-timesheets" element={<ProtectedRoute><EmployeeTimesheetsPage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -17,6 +17,40 @@ function parseDateRange(req: import("express").Request) {
   return { start, end };
 }
 
+const SCHEDULE_REPORT_FIELDS = [
+  "employeeCode",
+  "firstName",
+  "lastName",
+  "lineOfBusiness",
+  "segmentStart",
+  "segmentEnd",
+  "employmentStatus",
+  "shiftStartTime",
+  "shiftEndTime",
+  "daysOff",
+];
+
+const TIMESHEET_REPORT_FIELDS = [
+  "employeeCode",
+  "firstName",
+  "lastName",
+  "lineOfBusiness",
+  "workDate",
+  "scheduledClockIn",
+  "scheduledClockOut",
+  "actualClockIn",
+  "actualClockOut",
+  "unpaidBreakMins",
+  "regularHours",
+  "otHours",
+  "totalWorkedHours",
+  "attendanceAdjustment",
+  "supplementalType",
+  "supplementalHours",
+  "timeType",
+  "notes",
+];
+
 /**
  * Schedule report: for each day in the range, resolves the schedule that was
  * ACTUALLY in effect on that date (not just the employee's current schedule),
@@ -95,7 +129,10 @@ reportsRouter.get("/schedule", asyncHandler(async (req, res) => {
   }
 
   if (req.query.format === "csv") {
-    const csv = new CsvParser().parse(rows);
+    // Explicit fields (rather than inferring columns from rows[0]) keep
+    // column order stable and, importantly, avoid json2csv throwing when
+    // an employee/period has zero rows (e.g. no schedule on file yet).
+    const csv = new CsvParser({ fields: SCHEDULE_REPORT_FIELDS }).parse(rows);
     res.header("Content-Type", "text/csv");
     res.attachment("schedule-report.csv");
     return res.send(csv);
@@ -214,7 +251,7 @@ reportsRouter.get("/timesheet", asyncHandler(async (req, res) => {
   }
 
   if (req.query.format === "csv") {
-    const csv = new CsvParser().parse(rows);
+    const csv = new CsvParser({ fields: TIMESHEET_REPORT_FIELDS }).parse(rows);
     res.header("Content-Type", "text/csv");
     res.attachment("timesheet-report.csv");
     return res.send(csv);

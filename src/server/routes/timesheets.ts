@@ -50,6 +50,20 @@ function computeTotals(entries: { regularHours: unknown; otHours: unknown; suppl
 }
 
 /**
+ * Resolves the Sunday-Saturday 14-day pay period boundaries for a given
+ * date (default today) - pure date math, not tied to any employee. Lets
+ * the client navigate "current/previous/next pay period" for views that
+ * cover many employees at once without duplicating the anchor-date logic
+ * that only the server knows (PAY_PERIOD_ANCHOR).
+ */
+timesheetsRouter.get("/pay-period-bounds", asyncHandler(async (req, res) => {
+  const date = req.query.date ? new Date(String(req.query.date)) : new Date();
+  if (isNaN(date.getTime())) return res.status(400).json({ error: "Invalid date" });
+  const { start: periodStart, end: periodEnd } = getPayPeriodForDate(date);
+  res.json({ periodStart, periodEnd });
+}));
+
+/**
  * Pay-period view for an employee's timesheet: resolves the Sunday-Saturday
  * 14-day period containing `date` (default today) and returns whatever
  * entries already exist for it. Does not create a Timesheet row - that

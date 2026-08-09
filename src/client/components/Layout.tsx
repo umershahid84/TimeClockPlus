@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: "/employees", label: "Employees" },
   { to: "/schedules", label: "Schedules" },
   { to: "/timesheets", label: "Timesheets" },
+  { to: "/employee-timesheets", label: "Employee Timesheets" },
   { to: "/reports", label: "Reports" },
   { to: "/users", label: "Supervisors / Users", adminOnly: true },
 ];
