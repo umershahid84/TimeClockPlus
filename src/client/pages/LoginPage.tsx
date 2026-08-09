@@ -34,6 +34,7 @@ export function LoginPage() {
     <div className="login-page">
       <div className="card login-card">
         <h2>TimeClockPlus</h2>
+        <p className="login-subtitle">Timeclock &amp; Employee Scheduling</p>
         {/* autoComplete attributes let the browser/OS password manager offer to save credentials,
             per the "saved credentials" requirement, without the app storing plaintext passwords itself. */}
         <form onSubmit={handleSubmit} autoComplete="on">
@@ -45,19 +46,20 @@ export function LoginPage() {
             <label htmlFor="password">Password</label>
             <input id="password" type="password" name="current-password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
-          <div className="field">
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-              <input type="checkbox" style={{ width: "auto" }} checked={rememberUsername} onChange={(e) => setRememberUsername(e.target.checked)} />
+          <div className="field checkbox-field">
+            <label className="checkbox-label">
+              <input type="checkbox" checked={rememberUsername} onChange={(e) => setRememberUsername(e.target.checked)} />
               Remember my User ID on this device
             </label>
           </div>
           {error && <p className="error-text">{error}</p>}
-          <button className="btn" type="submit" disabled={submitting} style={{ width: "100%" }}>
+          <button className="btn" type="submit" disabled={submitting}>
             {submitting ? "Signing in..." : "Sign In"}
           </button>
         </form>
-        <p className="muted" style={{ marginTop: "1rem" }}>
-          <Link to="/forgot-password">Forgot password?</Link> &nbsp;|&nbsp;{" "}
+        <p className="muted login-links">
+          <Link to="/forgot-password">Forgot password?</Link>
+          <span aria-hidden="true">&middot;</span>
           <Link to="/forgot-username">Forgot User ID?</Link>
         </p>
       </div>

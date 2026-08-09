@@ -14,12 +14,22 @@ export function EmployeesPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const [emp, lob] = await Promise.all([
-      api.get<Employee[]>("/employees"),
-      api.get<LineOfBusiness[]>("/lines-of-business"),
-    ]);
-    setEmployees(emp);
-    setLines(lob);
+    // Fetched independently (not Promise.all) so a failure in one call
+    // can't silently leave the other's state empty with no explanation.
+    try {
+      setEmployees(await api.get<Employee[]>("/employees"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load employees.");
+    }
+    try {
+      const lob = await api.get<LineOfBusiness[]>("/lines-of-business");
+      setLines(lob);
+      if (lob.length === 0) {
+        setError("No lines of business are configured yet. Restart the server or contact an administrator.");
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load lines of business.");
+    }
   }
 
   useEffect(() => {
@@ -73,6 +83,8 @@ export function EmployeesPage() {
           </button>
         )}
       </div>
+
+      {error && <p className="error-text">{error}</p>}
 
       {showForm && user?.isAdministrator && (
         <div className="card">
@@ -138,7 +150,6 @@ export function EmployeesPage() {
                 ))}
               </div>
             </div>
-            {error && <p className="error-text">{error}</p>}
             <button className="btn" type="submit">Create Employee</button>
           </form>
         </div>

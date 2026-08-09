@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import path from "node:path";
 import { env } from "./config/env";
+import { ensureCoreLinesOfBusinessSeeded } from "./config/linesOfBusinessSeed";
 import { authRouter } from "./routes/auth";
 import { employeesRouter } from "./routes/employees";
 import { schedulesRouter } from "./routes/schedules";
@@ -47,7 +48,14 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(env.port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`TimeClockPlus listening on port ${env.port} (${env.nodeEnv})`);
-});
+ensureCoreLinesOfBusinessSeeded()
+  .catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error("Failed to seed core lines of business on startup:", err);
+  })
+  .finally(() => {
+    app.listen(env.port, () => {
+      // eslint-disable-next-line no-console
+      console.log(`TimeClockPlus listening on port ${env.port} (${env.nodeEnv})`);
+    });
+  });

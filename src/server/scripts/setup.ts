@@ -18,14 +18,9 @@
 import readline from "node:readline/promises";
 import { prisma } from "../config/prisma";
 import { env } from "../config/env";
+import { ensureCoreLinesOfBusinessSeeded } from "../config/linesOfBusinessSeed";
 import { generateTempPassword, hashPassword } from "../utils/auth";
 import { sendInitialAdminEmail } from "../services/email";
-
-const LINES_OF_BUSINESS: { code: "PUBLIC_PARKING" | "EMPLOYEE_PARKING" | "GROUND_TRANSPORTATION"; name: string }[] = [
-  { code: "PUBLIC_PARKING", name: "Public Parking" },
-  { code: "EMPLOYEE_PARKING", name: "Employee Parking" },
-  { code: "GROUND_TRANSPORTATION", name: "Ground Transportation" },
-];
 
 const INITIAL_ADMIN_USER_ID = "admin";
 
@@ -70,13 +65,7 @@ async function sendCredentialsResilient(params: { to: string; userId: string; te
 async function main() {
   console.log("Application Setup\n");
 
-  for (const lob of LINES_OF_BUSINESS) {
-    await prisma.lineOfBusiness.upsert({
-      where: { code: lob.code },
-      update: {},
-      create: lob,
-    });
-  }
+  await ensureCoreLinesOfBusinessSeeded();
 
   const existingAdmin = await prisma.user.findUnique({ where: { userId: INITIAL_ADMIN_USER_ID } });
   const resend = hasFlag("--resend");
