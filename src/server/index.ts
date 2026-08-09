@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import fs from "node:fs";
 import path from "node:path";
 import { env } from "./config/env";
 import { ensureCoreLinesOfBusinessSeeded } from "./config/linesOfBusinessSeed";
@@ -28,17 +29,25 @@ app.use("/api/users", usersRouter);
 app.use("/api/lines-of-business", linesOfBusinessRouter);
 app.use("/api/reports", reportsRouter);
 
-// This is a single integrated application: in production the same Express
-// process that serves /api also serves the built React app (dist/client),
-// so there is nothing separate to host or deploy. In development the
-// client is served instead by the Vite dev server (see `npm run dev`),
-// which proxies /api to this process.
-if (env.isProduction) {
-  const clientDist = path.join(__dirname, "../client");
+// This is a single integrated application: the same Express process that
+// serves /api also serves the built React app (dist/client) whenever a
+// build is present, so there is nothing separate to host or deploy.
+// Deliberately NOT gated on NODE_ENV/env.isProduction - `npm start` runs
+// the compiled server directly, and if NODE_ENV isn't explicitly set to
+// "production" (easy to forget, and .env.example defaults it to
+// "development"), gating on that would silently serve bare 404s for every
+// page instead of the app, which is exactly what was happening here.
+// During `npm run dev` the Vite dev server on its own port serves the
+// client instead - this only matters when dist/client actually exists.
+const clientDist = path.join(__dirname, "../client");
+if (fs.existsSync(path.join(clientDist, "index.html"))) {
   app.use(express.static(clientDist));
   app.get(/^(?!\/api\/).*/, (_req, res) => {
     res.sendFile(path.join(clientDist, "index.html"));
   });
+} else if (env.isProduction) {
+  // eslint-disable-next-line no-console
+  console.warn(`No built client found at ${clientDist} - run "npm run build" before "npm start". Only /api routes will work.`);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
