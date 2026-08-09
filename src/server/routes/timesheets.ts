@@ -6,6 +6,7 @@ import { recordAudit } from "../services/audit";
 import { resolveScheduleForDate } from "./schedules";
 import { calculateDecimalHours, combineDateAndTime, resolveShiftTimes, splitRegularAndOvertime, sumDecimalHours } from "../utils/time";
 import { getPayPeriodForDate } from "../utils/payPeriod";
+import { asyncHandler } from "../utils/asyncHandler";
 
 export const timesheetsRouter = Router();
 timesheetsRouter.use(requireAuth);
@@ -53,7 +54,7 @@ function computeTotals(entries: { regularHours: unknown; otHours: unknown; suppl
  * entries already exist for it. Does not create a Timesheet row - that
  * happens lazily the first time a day is added.
  */
-timesheetsRouter.get("/employee/:employeeId/pay-period", async (req, res) => {
+timesheetsRouter.get("/employee/:employeeId/pay-period", asyncHandler(async (req, res) => {
   const employeeId = Number(req.params.employeeId);
   const employee = await assertEmployeeAccess(req, employeeId);
   if (!employee) return res.status(403).json({ error: "Not authorized or employee not found" });
@@ -77,7 +78,7 @@ timesheetsRouter.get("/employee/:employeeId/pay-period", async (req, res) => {
     entries: entries.map(serializeEntry),
     totals: computeTotals(entries),
   });
-});
+}));
 
 const addDaySchema = z.object({ workDate: z.coerce.date() });
 
@@ -87,7 +88,7 @@ const addDaySchema = z.object({ workDate: z.coerce.date() });
  * date. Actual Clock In/Out default to the scheduled times - a supervisor
  * edits them afterward via PUT if the employee's actual time differed.
  */
-timesheetsRouter.post("/employee/:employeeId/entries", async (req, res) => {
+timesheetsRouter.post("/employee/:employeeId/entries", asyncHandler(async (req, res) => {
   const employeeId = Number(req.params.employeeId);
   const employee = await assertEmployeeAccess(req, employeeId);
   if (!employee) return res.status(403).json({ error: "Not authorized or employee not found" });
@@ -162,7 +163,7 @@ timesheetsRouter.post("/employee/:employeeId/entries", async (req, res) => {
     }
     throw err;
   }
-});
+}));
 
 const updateEntrySchema = z.object({
   clockInTime: z.string().regex(/^\d{1,2}:\d{2}$/).optional(), // "HH:MM", combined with the entry's workDate
@@ -198,7 +199,7 @@ const updateEntrySchema = z.object({
  * adjustment, supplemental time, time type, notes. The Scheduled columns
  * are never touched here - only "Add Day" populates them.
  */
-timesheetsRouter.put("/entries/:id", async (req, res) => {
+timesheetsRouter.put("/entries/:id", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const entry = await prisma.timesheetEntry.findUnique({
     where: { id },
@@ -282,9 +283,9 @@ timesheetsRouter.put("/entries/:id", async (req, res) => {
   });
 
   res.json(serializeEntry(updated));
-});
+}));
 
-timesheetsRouter.delete("/entries/:id", async (req, res) => {
+timesheetsRouter.delete("/entries/:id", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const entry = await prisma.timesheetEntry.findUnique({
     where: { id },
@@ -308,9 +309,9 @@ timesheetsRouter.delete("/entries/:id", async (req, res) => {
     previousValue: entry,
   });
   res.json({ success: true });
-});
+}));
 
-timesheetsRouter.post("/:id/submit", async (req, res) => {
+timesheetsRouter.post("/:id/submit", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const timesheet = await prisma.timesheet.findUnique({ where: { id }, include: { employee: true } });
   if (!timesheet) return res.status(404).json({ error: "Timesheet not found" });
@@ -320,9 +321,9 @@ timesheetsRouter.post("/:id/submit", async (req, res) => {
   const updated = await prisma.timesheet.update({ where: { id }, data: { status: "SUBMITTED" } });
   await recordAudit({ actorUserId: req.user!.id, action: "UPDATE", entityType: "TIMESHEET", entityId: id, employeeId: timesheet.employeeId, newValue: updated });
   res.json(updated);
-});
+}));
 
-timesheetsRouter.post("/:id/approve", async (req, res) => {
+timesheetsRouter.post("/:id/approve", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const timesheet = await prisma.timesheet.findUnique({ where: { id }, include: { employee: true } });
   if (!timesheet) return res.status(404).json({ error: "Timesheet not found" });
@@ -335,9 +336,9 @@ timesheetsRouter.post("/:id/approve", async (req, res) => {
   });
   await recordAudit({ actorUserId: req.user!.id, action: "APPROVE", entityType: "TIMESHEET", entityId: id, employeeId: timesheet.employeeId, newValue: updated });
   res.json(updated);
-});
+}));
 
-timesheetsRouter.post("/:id/reject", async (req, res) => {
+timesheetsRouter.post("/:id/reject", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const timesheet = await prisma.timesheet.findUnique({ where: { id }, include: { employee: true } });
   if (!timesheet) return res.status(404).json({ error: "Timesheet not found" });
@@ -347,4 +348,4 @@ timesheetsRouter.post("/:id/reject", async (req, res) => {
   const updated = await prisma.timesheet.update({ where: { id }, data: { status: "REJECTED" } });
   await recordAudit({ actorUserId: req.user!.id, action: "REJECT", entityType: "TIMESHEET", entityId: id, employeeId: timesheet.employeeId, newValue: updated });
   res.json(updated);
-});
+}));

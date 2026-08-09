@@ -13,6 +13,22 @@ import { usersRouter } from "./routes/users";
 import { linesOfBusinessRouter } from "./routes/linesOfBusiness";
 import { reportsRouter } from "./routes/reports";
 
+// Last-resort safety net: every route handler is wrapped in asyncHandler
+// (see utils/asyncHandler.ts) so application errors are caught and
+// converted to a proper JSON response, but this also guards against any
+// error in code that ISN'T an Express handler (background timers, etc.).
+// On modern Node, an unhandled rejection defaults to crashing the whole
+// process - logging instead of crashing keeps one bad request from taking
+// down every other user's session.
+process.on("unhandledRejection", (reason) => {
+  // eslint-disable-next-line no-console
+  console.error("Unhandled promise rejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("Uncaught exception:", err);
+});
+
 const app = express();
 
 app.use(helmet({ contentSecurityPolicy: false }));

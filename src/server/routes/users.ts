@@ -4,13 +4,14 @@ import { prisma } from "../config/prisma";
 import { env } from "../config/env";
 import { requireAdministrator, requireAuth } from "../middleware/auth";
 import { generateTempPassword, hashPassword } from "../utils/auth";
+import { asyncHandler } from "../utils/asyncHandler";
 import { sendSupervisorWelcomeEmail } from "../services/email";
 import { recordAudit } from "../services/audit";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth, requireAdministrator);
 
-usersRouter.get("/", async (_req, res) => {
+usersRouter.get("/", asyncHandler(async (_req, res) => {
   const users = await prisma.user.findMany({
     include: { lineOfBusinessAccess: { include: { lineOfBusiness: true } } },
     orderBy: [{ lastName: "asc" }],
@@ -33,7 +34,7 @@ usersRouter.get("/", async (_req, res) => {
       })),
     }))
   );
-});
+}));
 
 const createSupervisorSchema = z.object({
   userId: z.string().min(3),
@@ -46,8 +47,13 @@ const createSupervisorSchema = z.object({
 
 // Administrator creates a Supervisor account: generates a temp password,
 // emails the User ID / temp password / login link, and forces a password
-// change on first login.
-usersRouter.post("/supervisors", async (req, res) => {
+// change on first login. The account is created regardless of whether the
+// email succeeds - a mail relay failure must never look like the whole
+// operation failed when the account was actually created; the response
+// tells the caller whether the email went out, and if not, includes the
+// temporary password so the administrator can hand it over another way
+// (this is the only place that password is ever recoverable).
+usersRouter.post("/supervisors", asyncHandler(async (req, res) => {
   const parsed = createSupervisorSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const data = parsed.data;
@@ -73,7 +79,15 @@ usersRouter.post("/supervisors", async (req, res) => {
     include: { lineOfBusinessAccess: true },
   });
 
-  await sendSupervisorWelcomeEmail({ to: user.email, userId: user.userId, tempPassword });
+  let emailSent = true;
+  try {
+    await sendSupervisorWelcomeEmail({ to: user.email, userId: user.userId, tempPassword });
+  } catch (err) {
+    emailSent = false;
+    // eslint-disable-next-line no-console
+    console.error("Failed to send supervisor welcome email:", err instanceof Error ? err.message : err);
+  }
+
   await recordAudit({
     actorUserId: req.user!.id,
     action: "CREATE",
@@ -82,12 +96,18 @@ usersRouter.post("/supervisors", async (req, res) => {
     newValue: { userId: user.userId, email: user.email, role: user.role },
   });
 
-  res.status(201).json({ id: user.id, userId: user.userId, email: user.email });
-});
+  res.status(201).json({
+    id: user.id,
+    userId: user.userId,
+    email: user.email,
+    emailSent,
+    ...(emailSent ? {} : { tempPassword }),
+  });
+}));
 
 // Grant/revoke Administrator privileges on an existing Supervisor.
 // Existing supervisory line-of-business access is left untouched.
-usersRouter.post("/:id/administrator", async (req, res) => {
+usersRouter.post("/:id/administrator", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const grant = Boolean(req.body?.grant);
   const existing = await prisma.user.findUnique({ where: { id } });
@@ -103,14 +123,14 @@ usersRouter.post("/:id/administrator", async (req, res) => {
     newValue: { isAdministrator: updated.isAdministrator },
   });
   res.json(updated);
-});
+}));
 
 const updateAccessSchema = z.object({
   lineOfBusinessIds: z.array(z.number().int()),
   canViewAllLinesOfBiz: z.boolean().optional(),
 });
 
-usersRouter.put("/:id/access", async (req, res) => {
+usersRouter.put("/:id/access", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const parsed = updateAccessSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -137,11 +157,11 @@ usersRouter.put("/:id/access", async (req, res) => {
   });
 
   res.json({ success: true });
-});
+}));
 
-usersRouter.post("/:id/deactivate", async (req, res) => {
+usersRouter.post("/:id/deactivate", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const updated = await prisma.user.update({ where: { id }, data: { isActive: false } });
   await recordAudit({ actorUserId: req.user!.id, action: "UPDATE", entityType: "USER", entityId: id, newValue: { isActive: false } });
   res.json(updated);
-});
+}));

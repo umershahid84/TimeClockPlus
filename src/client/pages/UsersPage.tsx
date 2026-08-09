@@ -56,8 +56,19 @@ export function UsersPage() {
     setError(null);
     setMessage(null);
     try {
-      await api.post("/users/supervisors", form);
-      setMessage(`Supervisor account created. A welcome email with login details was sent to ${form.email}.`);
+      const created = await api.post<{ userId: string; email: string; emailSent: boolean; tempPassword?: string }>(
+        "/users/supervisors",
+        form
+      );
+      if (created.emailSent) {
+        setMessage(`Supervisor account created. A welcome email with login details was sent to ${form.email}.`);
+      } else {
+        setError(
+          `Supervisor account "${created.userId}" was created, but the welcome email could not be sent. ` +
+            `Give them these credentials directly: User ID "${created.userId}", Temporary Password "${created.tempPassword}". ` +
+            `(Check your email configuration - see the setup guide.)`
+        );
+      }
       setShowForm(false);
       await load();
     } catch (err) {

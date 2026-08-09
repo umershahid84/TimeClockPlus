@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { assertLineOfBusinessAccess, requireAdministrator, requireAuth } from "../middleware/auth";
 import { recordAudit } from "../services/audit";
+import { asyncHandler } from "../utils/asyncHandler";
 
 export const employeesRouter = Router();
 employeesRouter.use(requireAuth);
@@ -12,7 +13,7 @@ function visibleLineOfBusinessFilter(user: NonNullable<Express.Request["user"]>)
   return { lineOfBusinessId: { in: user.lineOfBusinessIds } };
 }
 
-employeesRouter.get("/", async (req, res) => {
+employeesRouter.get("/", asyncHandler(async (req, res) => {
   const status = (req.query.status as string) ?? "ACTIVE";
   const lineOfBusinessId = req.query.lineOfBusinessId ? Number(req.query.lineOfBusinessId) : undefined;
 
@@ -30,9 +31,9 @@ employeesRouter.get("/", async (req, res) => {
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
   res.json(employees);
-});
+}));
 
-employeesRouter.get("/:id", async (req, res) => {
+employeesRouter.get("/:id", asyncHandler(async (req, res) => {
   const employee = await prisma.employee.findUnique({
     where: { id: Number(req.params.id) },
     include: { lineOfBusiness: true, schedules: { orderBy: { effectiveDate: "desc" } } },
@@ -42,7 +43,7 @@ employeesRouter.get("/:id", async (req, res) => {
     return res.status(403).json({ error: "Not authorized for this line of business" });
   }
   res.json(employee);
-});
+}));
 
 const createEmployeeSchema = z.object({
   employeeCode: z.string().min(1),
@@ -63,7 +64,7 @@ const createEmployeeSchema = z.object({
 // Supervisors may view employees, schedules, and timesheets for their
 // assigned line(s) of business, and record actual time worked, but they
 // cannot touch the employee/schedule master records themselves.
-employeesRouter.post("/", requireAdministrator, async (req, res) => {
+employeesRouter.post("/", requireAdministrator, asyncHandler(async (req, res) => {
   const parsed = createEmployeeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const data = parsed.data;
@@ -101,7 +102,7 @@ employeesRouter.post("/", requireAdministrator, async (req, res) => {
   });
 
   res.status(201).json(employee);
-});
+}));
 
 const updateEmployeeSchema = z.object({
   firstName: z.string().min(1).optional(),
@@ -109,7 +110,7 @@ const updateEmployeeSchema = z.object({
   phoneNumber: z.string().min(1).optional(),
 });
 
-employeesRouter.put("/:id", requireAdministrator, async (req, res) => {
+employeesRouter.put("/:id", requireAdministrator, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.employee.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Employee not found" });
@@ -127,9 +128,9 @@ employeesRouter.put("/:id", requireAdministrator, async (req, res) => {
     newValue: updated,
   });
   res.json(updated);
-});
+}));
 
-employeesRouter.post("/:id/archive", requireAdministrator, async (req, res) => {
+employeesRouter.post("/:id/archive", requireAdministrator, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.employee.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Employee not found" });
@@ -147,9 +148,9 @@ employeesRouter.post("/:id/archive", requireAdministrator, async (req, res) => {
     newValue: updated,
   });
   res.json(updated);
-});
+}));
 
-employeesRouter.delete("/:id", requireAdministrator, async (req, res) => {
+employeesRouter.delete("/:id", requireAdministrator, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.employee.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Employee not found" });
@@ -164,4 +165,4 @@ employeesRouter.delete("/:id", requireAdministrator, async (req, res) => {
     newValue: updated,
   });
   res.json({ success: true });
-});
+}));

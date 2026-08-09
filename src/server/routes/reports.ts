@@ -5,6 +5,7 @@ import { assertLineOfBusinessAccess, requireAuth } from "../middleware/auth";
 import { resolveScheduleForDate } from "./schedules";
 import { sumDecimalHours } from "../utils/time";
 import { formatLocalDate, formatLocalTime } from "../utils/timezone";
+import { asyncHandler } from "../utils/asyncHandler";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
@@ -22,7 +23,7 @@ function parseDateRange(req: import("express").Request) {
  * per the historical-data requirement. All dates/times are rendered in the
  * organization's local wall-clock convention - never a raw ISO/UTC value.
  */
-reportsRouter.get("/schedule", async (req, res) => {
+reportsRouter.get("/schedule", asyncHandler(async (req, res) => {
   const range = parseDateRange(req);
   if (!range) return res.status(400).json({ error: "start and end query params are required" });
   const lineOfBusinessId = req.query.lineOfBusinessId ? Number(req.query.lineOfBusinessId) : undefined;
@@ -100,7 +101,7 @@ reportsRouter.get("/schedule", async (req, res) => {
     return res.send(csv);
   }
   res.json(rows);
-});
+}));
 
 const ATTENDANCE_LABELS: Record<string, string> = {
   NONE: "",
@@ -133,7 +134,7 @@ const TIME_TYPE_LABELS: Record<string, string> = {
  * supplemental time all broken out per day. All clock times are rendered
  * in local wall-clock form - never UTC/Zulu.
  */
-reportsRouter.get("/timesheet", async (req, res) => {
+reportsRouter.get("/timesheet", asyncHandler(async (req, res) => {
   const range = parseDateRange(req);
   if (!range) return res.status(400).json({ error: "start and end query params are required" });
   const lineOfBusinessId = req.query.lineOfBusinessId ? Number(req.query.lineOfBusinessId) : undefined;
@@ -219,4 +220,4 @@ reportsRouter.get("/timesheet", async (req, res) => {
     return res.send(csv);
   }
   res.json(rows);
-});
+}));

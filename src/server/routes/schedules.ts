@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { assertLineOfBusinessAccess, requireAdministrator, requireAuth } from "../middleware/auth";
 import { recordAudit } from "../services/audit";
+import { asyncHandler } from "../utils/asyncHandler";
 
 export const schedulesRouter = Router();
 schedulesRouter.use(requireAuth);
@@ -24,7 +25,7 @@ export async function resolveScheduleForDate(employeeId: number, date: Date) {
 }
 
 // Full schedule history for an employee.
-schedulesRouter.get("/employee/:employeeId", async (req, res) => {
+schedulesRouter.get("/employee/:employeeId", asyncHandler(async (req, res) => {
   const employeeId = Number(req.params.employeeId);
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return res.status(404).json({ error: "Employee not found" });
@@ -36,10 +37,10 @@ schedulesRouter.get("/employee/:employeeId", async (req, res) => {
     orderBy: { effectiveDate: "desc" },
   });
   res.json(schedules);
-});
+}));
 
 // The schedule in effect on a specific date (defaults to today).
-schedulesRouter.get("/employee/:employeeId/at", async (req, res) => {
+schedulesRouter.get("/employee/:employeeId/at", asyncHandler(async (req, res) => {
   const employeeId = Number(req.params.employeeId);
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return res.status(404).json({ error: "Employee not found" });
@@ -49,10 +50,10 @@ schedulesRouter.get("/employee/:employeeId/at", async (req, res) => {
   const date = req.query.date ? new Date(String(req.query.date)) : new Date();
   const schedule = await resolveScheduleForDate(employeeId, date);
   res.json(schedule);
-});
+}));
 
 // List current schedules across a line of business (for the schedule board / print view).
-schedulesRouter.get("/lineOfBusiness/:lineOfBusinessId", async (req, res) => {
+schedulesRouter.get("/lineOfBusiness/:lineOfBusinessId", asyncHandler(async (req, res) => {
   const lineOfBusinessId = Number(req.params.lineOfBusinessId);
   if (!assertLineOfBusinessAccess(req.user!, lineOfBusinessId)) {
     return res.status(403).json({ error: "Not authorized for this line of business" });
@@ -69,7 +70,7 @@ schedulesRouter.get("/lineOfBusiness/:lineOfBusinessId", async (req, res) => {
     }))
   );
   res.json(results);
-});
+}));
 
 const newScheduleSchema = z.object({
   employmentStatus: z.enum(["FULL_TIME", "PART_TIME"]),
@@ -86,7 +87,7 @@ const newScheduleSchema = z.object({
 // requirement. Modifying an employee's schedule is master-data
 // maintenance, so only administrators may do it - supervisors can view
 // schedules but not change them.
-schedulesRouter.post("/employee/:employeeId", requireAdministrator, async (req, res) => {
+schedulesRouter.post("/employee/:employeeId", requireAdministrator, asyncHandler(async (req, res) => {
   const employeeId = Number(req.params.employeeId);
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return res.status(404).json({ error: "Employee not found" });
@@ -132,4 +133,4 @@ schedulesRouter.post("/employee/:employeeId", requireAdministrator, async (req, 
   });
 
   res.status(201).json(result);
-});
+}));

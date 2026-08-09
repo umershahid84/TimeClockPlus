@@ -13,6 +13,19 @@ import {
 import { sendForgotUsernameEmail, sendPasswordResetCodeEmail } from "../services/email";
 import { recordAudit } from "../services/audit";
 import { requireAuth } from "../middleware/auth";
+import { asyncHandler } from "../utils/asyncHandler";
+
+/** Logs and swallows email failures - these flows must not fail (or leak
+ * account existence) just because the mail relay is down; the generic
+ * response is returned either way. */
+async function sendEmailBestEffort(label: string, send: () => Promise<unknown>) {
+  try {
+    await send();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`Failed to send ${label} email:`, err instanceof Error ? err.message : err);
+  }
+}
 
 export const authRouter = Router();
 
@@ -24,7 +37,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-authRouter.post("/login", loginLimiter, async (req, res) => {
+authRouter.post("/login", loginLimiter, asyncHandler(async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "userId and password are required" });
   const { userId, password } = parsed.data;
@@ -78,14 +91,14 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
       canViewAllLinesOfBiz: user.canViewAllLinesOfBiz,
     },
   });
-});
+}));
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(10),
 });
 
-authRouter.post("/change-password", requireAuth, async (req, res) => {
+authRouter.post("/change-password", requireAuth, asyncHandler(async (req, res) => {
   const parsed = changePasswordSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
@@ -99,13 +112,13 @@ authRouter.post("/change-password", requireAuth, async (req, res) => {
   });
   await recordAudit({ actorUserId: user.id, action: "PASSWORD_RESET", entityType: "USER", entityId: user.id });
   res.json({ success: true });
-});
+}));
 
 // --- Forgot password (email/userId -> OTC -> new password) ---
 
 const forgotPasswordRequestSchema = z.object({ identifier: z.string().min(1) });
 
-authRouter.post("/forgot-password/request", forgotLimiter, async (req, res) => {
+authRouter.post("/forgot-password/request", forgotLimiter, asyncHandler(async (req, res) => {
   const parsed = forgotPasswordRequestSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
   const { identifier } = parsed.data;
@@ -124,11 +137,11 @@ authRouter.post("/forgot-password/request", forgotLimiter, async (req, res) => {
         expiresAt: new Date(Date.now() + env.passwordResetCodeExpiryMinutes * 60 * 1000),
       },
     });
-    await sendPasswordResetCodeEmail({ to: user.email, code });
+    await sendEmailBestEffort("password reset code", () => sendPasswordResetCodeEmail({ to: user.email, code }));
   }
 
   res.json({ message: "If an account exists, a one-time code has been sent to the registered email address." });
-});
+}));
 
 const forgotPasswordConfirmSchema = z.object({
   identifier: z.string().min(1),
@@ -136,7 +149,7 @@ const forgotPasswordConfirmSchema = z.object({
   newPassword: z.string().min(10),
 });
 
-authRouter.post("/forgot-password/confirm", forgotLimiter, async (req, res) => {
+authRouter.post("/forgot-password/confirm", forgotLimiter, asyncHandler(async (req, res) => {
   const parsed = forgotPasswordConfirmSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
   const { identifier, code, newPassword } = parsed.data;
@@ -167,24 +180,24 @@ authRouter.post("/forgot-password/confirm", forgotLimiter, async (req, res) => {
   await recordAudit({ actorUserId: user.id, action: "PASSWORD_RESET", entityType: "USER", entityId: user.id });
 
   res.json({ success: true });
-});
+}));
 
 // --- Forgot username ---
 
 const forgotUsernameSchema = z.object({ email: z.string().email() });
 
-authRouter.post("/forgot-username", forgotLimiter, async (req, res) => {
+authRouter.post("/forgot-username", forgotLimiter, asyncHandler(async (req, res) => {
   const parsed = forgotUsernameSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
 
   const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   if (user) {
-    await sendForgotUsernameEmail({ to: user.email, userId: user.userId });
+    await sendEmailBestEffort("forgot username", () => sendForgotUsernameEmail({ to: user.email, userId: user.userId }));
   }
   res.json({ message: "If an account exists with that email, the User ID has been sent to it." });
-});
+}));
 
-authRouter.get("/me", requireAuth, async (req, res) => {
+authRouter.get("/me", requireAuth, asyncHandler(async (req, res) => {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: req.user!.id },
     include: { lineOfBusinessAccess: { include: { lineOfBusiness: true } } },
@@ -204,4 +217,4 @@ authRouter.get("/me", requireAuth, async (req, res) => {
       name: a.lineOfBusiness.name,
     })),
   });
-});
+}));
