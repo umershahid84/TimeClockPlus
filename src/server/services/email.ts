@@ -25,16 +25,47 @@ function getTransporter() {
   return transporter;
 }
 
+/**
+ * TLS certificate failures against an internal relay are the single most
+ * common email misconfiguration for this app (self-signed or expired
+ * certs are normal on an internal-only relay). Rather than surfacing just
+ * nodemailer's bare "certificate has expired"/"self signed certificate"
+ * message, append the exact fix so it's impossible to miss wherever this
+ * error is logged or shown.
+ */
+function describeEmailError(err: unknown): Error {
+  const message = err instanceof Error ? err.message : String(err);
+  const code = (err as { code?: string } | undefined)?.code;
+  const isTlsCertError = code === "ESOCKET" || /certificate|self.signed|SSL|TLS/i.test(message);
+  if (!isTlsCertError) {
+    return err instanceof Error ? err : new Error(message);
+  }
+  const guidance = env.email.rejectUnauthorizedTls
+    ? `set EMAIL_TLS_REJECT_UNAUTHORIZED=false in your .env file (NOT .env.example - that file is never read at runtime, only .env is) and restart/re-run.`
+    : `EMAIL_TLS_REJECT_UNAUTHORIZED is already set to false, so this is a different TLS problem, not a certificate-trust issue. Double-check EMAIL_HOST/EMAIL_PORT are correct and the relay is reachable from this machine.`;
+  return new Error(
+    `${message} - this looks like a TLS certificate problem talking to EMAIL_HOST="${env.email.host}". ` +
+      `If this is an internal-only mail relay with a self-signed or expired certificate, ${guidance} ` +
+      `If the relay doesn't use STARTTLS at all, set EMAIL_IGNORE_TLS=true instead.`,
+    { cause: err instanceof Error ? err : undefined }
+  );
+}
+
 async function send(to: string, subject: string, html: string) {
   // In non-production environments, TEST_EMAIL_USER (if set) captures all
   // outgoing mail so test runs never reach real employee inboxes.
   const recipient = !env.isProduction && env.testEmailUser ? env.testEmailUser : to;
-  const info = await getTransporter().sendMail({
-    from: env.email.sender,
-    to: recipient,
-    subject: recipient === to ? subject : `[to: ${to}] ${subject}`,
-    html,
-  });
+  let info: Awaited<ReturnType<nodemailer.Transporter["sendMail"]>>;
+  try {
+    info = await getTransporter().sendMail({
+      from: env.email.sender,
+      to: recipient,
+      subject: recipient === to ? subject : `[to: ${to}] ${subject}`,
+      html,
+    });
+  } catch (err) {
+    throw describeEmailError(err);
+  }
   if (!env.sendEmails || !env.email.host) {
     // eslint-disable-next-line no-console
     console.log(`[email:dev-mode] to=${recipient} subject="${subject}"`, info.message?.toString());
