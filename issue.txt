@@ -1,0 +1,70 @@
+[umer@localhost tcp]$ sudo systemctl status timeclockplus
+[sudo] password for umer: 
+× timeclockplus.service - TimeClockPlus (Timeclock and Employee Scheduling application)
+     Loaded: loaded (/etc/systemd/system/timeclockplus.service; enabled; preset: disabled)
+     Active: failed (Result: exit-code) since Fri 2026-08-14 11:40:48 PDT; 5min ago
+   Duration: 640ms
+       Docs: https://github.com/umershahid84/TimeClockPlus
+    Process: 5456 ExecStart=/usr/bin/node dist/server/index.js (code=exited, status=1/FAILURE)
+   Main PID: 5456 (code=exited, status=1/FAILURE)
+        CPU: 455ms
+
+Aug 14 11:40:48 localhost.localdomain systemd[1]: timeclockplus.service: Scheduled restart job, restart counter is at 5.
+Aug 14 11:40:48 localhost.localdomain systemd[1]: Stopped TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:40:48 localhost.localdomain systemd[1]: timeclockplus.service: Start request repeated too quickly.
+Aug 14 11:40:48 localhost.localdomain systemd[1]: timeclockplus.service: Failed with result 'exit-code'.
+Aug 14 11:40:48 localhost.localdomain systemd[1]: Failed to start TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:41:17 localhost.localdomain systemd[1]: timeclockplus.service: Start request repeated too quickly.
+Aug 14 11:41:17 localhost.localdomain systemd[1]: timeclockplus.service: Failed with result 'exit-code'.
+Aug 14 11:41:17 localhost.localdomain systemd[1]: Failed to start TimeClockPlus (Timeclock and Employee Scheduling application).
+[umer@localhost tcp]$ journalctl -u timeclockplus -n 50 --no-pager
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]: Error: Cannot find module '/opt/timeclockplus/dist/server/index.js'
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]:     at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1028:15)
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]:     at Function.Module._load (node:internal/modules/cjs/loader:873:27)
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]:     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]:     at node:internal/main/run_main_module:22:47 {
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]:   code: 'MODULE_NOT_FOUND',
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]:   requireStack: []
+Aug 14 11:40:32 localhost.localdomain timeclockplus[5437]: }
+Aug 14 11:40:32 localhost.localdomain systemd[1]: timeclockplus.service: Main process exited, code=exited, status=1/FAILURE
+Aug 14 11:40:32 localhost.localdomain systemd[1]: timeclockplus.service: Failed with result 'exit-code'.
+Aug 14 11:40:37 localhost.localdomain systemd[1]: timeclockplus.service: Scheduled restart job, restart counter is at 3.
+Aug 14 11:40:37 localhost.localdomain systemd[1]: Stopped TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:40:37 localhost.localdomain systemd[1]: Started TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]: node:internal/modules/cjs/loader:1031
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:   throw err;
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:   ^
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]: Error: Cannot find module '/opt/timeclockplus/dist/server/index.js'
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:     at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1028:15)
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:     at Function.Module._load (node:internal/modules/cjs/loader:873:27)
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:     at node:internal/main/run_main_module:22:47 {
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:   code: 'MODULE_NOT_FOUND',
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]:   requireStack: []
+Aug 14 11:40:38 localhost.localdomain timeclockplus[5446]: }
+Aug 14 11:40:38 localhost.localdomain systemd[1]: timeclockplus.service: Main process exited, code=exited, status=1/FAILURE
+Aug 14 11:40:38 localhost.localdomain systemd[1]: timeclockplus.service: Failed with result 'exit-code'.
+Aug 14 11:40:43 localhost.localdomain systemd[1]: timeclockplus.service: Scheduled restart job, restart counter is at 4.
+Aug 14 11:40:43 localhost.localdomain systemd[1]: Stopped TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:40:43 localhost.localdomain systemd[1]: Started TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]: node:internal/modules/cjs/loader:1031
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:   throw err;
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:   ^
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]: Error: Cannot find module '/opt/timeclockplus/dist/server/index.js'
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:     at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1028:15)
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:     at Function.Module._load (node:internal/modules/cjs/loader:873:27)
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:     at node:internal/main/run_main_module:22:47 {
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:   code: 'MODULE_NOT_FOUND',
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]:   requireStack: []
+Aug 14 11:40:43 localhost.localdomain timeclockplus[5456]: }
+Aug 14 11:40:43 localhost.localdomain systemd[1]: timeclockplus.service: Main process exited, code=exited, status=1/FAILURE
+Aug 14 11:40:43 localhost.localdomain systemd[1]: timeclockplus.service: Failed with result 'exit-code'.
+Aug 14 11:40:48 localhost.localdomain systemd[1]: timeclockplus.service: Scheduled restart job, restart counter is at 5.
+Aug 14 11:40:48 localhost.localdomain systemd[1]: Stopped TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:40:48 localhost.localdomain systemd[1]: timeclockplus.service: Start request repeated too quickly.
+Aug 14 11:40:48 localhost.localdomain systemd[1]: timeclockplus.service: Failed with result 'exit-code'.
+Aug 14 11:40:48 localhost.localdomain systemd[1]: Failed to start TimeClockPlus (Timeclock and Employee Scheduling application).
+Aug 14 11:41:17 localhost.localdomain systemd[1]: timeclockplus.service: Start request repeated too quickly.
+Aug 14 11:41:17 localhost.localdomain systemd[1]: timeclockplus.service: Failed with result 'exit-code'.
+Aug 14 11:41:17 localhost.localdomain systemd[1]: Failed to start TimeClockPlus (Timeclock and Employee Scheduling application).
