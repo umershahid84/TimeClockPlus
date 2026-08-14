@@ -116,3 +116,61 @@ to the app's `PORT`; Caddy in particular can obtain and renew a
 Let's Encrypt certificate automatically with a one-line config. This is a
 separate concern from the service staying up, and can be added
 independently of everything above.
+
+## 9. Troubleshooting a failed start
+
+Always start with the actual error, not guesswork:
+
+```bash
+sudo systemctl status timeclockplus
+journalctl -u timeclockplus -n 50 --no-pager
+```
+
+Common causes, in order of likelihood:
+
+- **`.env` missing or incomplete.** The app reads its configuration from
+  `WorkingDirectory/.env` (step 2) and throws
+  `Missing required environment variable: ...` on boot if a required
+  variable (e.g. `DB_USER`, `JWT_SECRET`) isn't set. Confirm the file
+  exists and is readable by the service user:
+  `sudo -u timeclockplus cat /opt/timeclockplus/.env`.
+- **No build output.** `dist/server/index.js` (the `ExecStart=` target)
+  only exists after `npm run build` has been run once in
+  `WorkingDirectory` - check with
+  `sudo -u timeclockplus test -f /opt/timeclockplus/dist/server/index.js && echo OK`.
+- **Wrong `node` path.** If Node was installed via nvm or a version
+  manager, `/usr/bin/node` in `ExecStart=` won't exist for the service
+  user. Compare `sudo -u timeclockplus which node` against the
+  `ExecStart=` line in `/etc/systemd/system/timeclockplus.service`, fix
+  it, then `sudo systemctl daemon-reload && sudo systemctl restart timeclockplus`.
+- **Database not reachable.** If MariaDB isn't running yet, or
+  `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASS` in `.env` are wrong,
+  the log will show a Prisma "Can't reach database server" error.
+  `Restart=on-failure` will keep retrying, but only up to
+  `StartLimitBurst=5` times within `StartLimitIntervalSec=60` - after
+  that the unit is left in a `failed` state and needs
+  `sudo systemctl reset-failed timeclockplus` once the database is
+  actually reachable, followed by `sudo systemctl start timeclockplus`.
+- **No schema / no admin account yet.** Steps 2's "Deploy the app" only
+  installs the code - you still need to run
+  `npx prisma migrate deploy` and `npm run setup -- --email=...` (step 2,
+  "Run migrations and the initial admin setup") once against the real
+  database before the app has anything to serve.
+- **Permissions on `WorkingDirectory` or `.env`.** Everything under
+  `/opt/timeclockplus` must be owned by (or readable by)
+  `timeclockplus:timeclockplus` - re-run
+  `sudo chown -R timeclockplus:timeclockplus /opt/timeclockplus` if in
+  doubt.
+- **`User=`/`Group=`/`WorkingDirectory=` in the unit file don't match**
+  where you actually deployed the app, or you edited the unit file
+  in place instead of `/etc/systemd/system/timeclockplus.service` - the
+  running config is whatever `daemon-reload` last picked up from
+  `/etc/systemd/system/`, not the copy in the repo.
+
+Once you've made a change, always re-run:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart timeclockplus
+sudo systemctl status timeclockplus
+```

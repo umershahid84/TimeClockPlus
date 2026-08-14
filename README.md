@@ -87,6 +87,58 @@ npm start
 This serves the whole application — API and web UI — from one process on
 `PORT` (default 4000).
 
+## Running continuously with systemd (Linux)
+
+Full walkthrough: [`docs/SYSTEMD.md`](docs/SYSTEMD.md). This lets the app
+start on boot, restart automatically if it crashes, and log to
+`journalctl`, so `sudo systemctl start timeclockplus` (and `enable` for
+boot) just works.
+
+```bash
+# 1. Dedicated service user
+sudo useradd --system --create-home --shell /usr/sbin/nologin timeclockplus
+
+# 2. Deploy the app as that user
+sudo mkdir -p /opt/timeclockplus
+sudo chown timeclockplus:timeclockplus /opt/timeclockplus
+sudo -u timeclockplus -H bash -c '
+  git clone https://github.com/umershahid84/TimeClockPlus.git /opt/timeclockplus
+  cd /opt/timeclockplus
+  npm install
+  npm run build
+'
+
+# 3. Configure it
+sudo -u timeclockplus cp /opt/timeclockplus/.env.example /opt/timeclockplus/.env
+sudo -u timeclockplus -H vim /opt/timeclockplus/.env   # fill in DB_*, JWT_SECRET, EMAIL_*, etc.
+sudo chmod 600 /opt/timeclockplus/.env
+
+# 4. Create the database schema and the first admin account
+sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npx prisma migrate deploy'
+sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npm run setup -- --email=admin@example.com'
+
+# 5. Install the unit
+sudo cp /opt/timeclockplus/deploy/systemd/timeclockplus.service /etc/systemd/system/
+# Open it and check User=, Group=, WorkingDirectory=, and that ExecStart=
+# points at the right `node` binary (`sudo -u timeclockplus which node`) -
+# see docs/SYSTEMD.md for the full checklist, including the MariaDB unit
+# name check.
+sudo systemctl daemon-reload
+
+# 6. Start it
+sudo systemctl enable --now timeclockplus
+sudo systemctl status timeclockplus
+journalctl -u timeclockplus -f
+```
+
+**If `systemctl start` fails**, the fix is almost always visible in
+`journalctl -u timeclockplus -n 50 --no-pager` — the two most common
+causes are: (a) steps 3-4 above were skipped, so `.env` is missing or the
+database has no schema/admin yet, or (b) `ExecStart=`'s `node` path
+doesn't match `sudo -u timeclockplus which node` (common with nvm-based
+Node installs). See the troubleshooting notes in
+[`docs/SYSTEMD.md`](docs/SYSTEMD.md) for the full list of things to check.
+
 ## Roles
 
 | Capability | Administrator | Supervisor |
