@@ -10,6 +10,7 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
+    "postbuild": "node scripts/postbuild-systemd.js",
     "start": "node dist/server/index.js",
     "setup": "tsx src/server/scripts/setup.ts",
     "prisma:generate": "prisma generate",

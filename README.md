@@ -91,53 +91,50 @@ This serves the whole application — API and web UI — from one process on
 
 Full walkthrough: [`docs/SYSTEMD.md`](docs/SYSTEMD.md). This lets the app
 start on boot, restart automatically if it crashes, and log to
-`journalctl`, so `sudo systemctl start timeclockplus` (and `enable` for
-boot) just works.
+`journalctl`.
+
+**`npm run build`, run as root, also installs/refreshes the systemd
+unit, fixes file ownership for the unprivileged service account, and
+enables it** — so `sudo systemctl start timeclockplus` really is the only
+command needed to start it, after the one-time setup below.
 
 ```bash
-# 1. Dedicated service user
+# 1. Dedicated service user (the app runs as this account, not root)
 sudo useradd --system --create-home --shell /usr/sbin/nologin timeclockplus
 
-# 2. Deploy the app as that user
+# 2. Clone and configure
 sudo mkdir -p /opt/timeclockplus
-sudo chown timeclockplus:timeclockplus /opt/timeclockplus
-sudo -u timeclockplus -H bash -c '
-  git clone https://github.com/umershahid84/TimeClockPlus.git /opt/timeclockplus
-  cd /opt/timeclockplus
-  npm install
-  npm run build
-'
+sudo git clone https://github.com/umershahid84/TimeClockPlus.git /opt/timeclockplus
+cd /opt/timeclockplus
+sudo cp .env.example .env
+sudo vim .env   # fill in DB_*, JWT_SECRET, EMAIL_*, etc.
 
-# 3. Configure it
-sudo -u timeclockplus cp /opt/timeclockplus/.env.example /opt/timeclockplus/.env
-sudo -u timeclockplus -H vim /opt/timeclockplus/.env   # fill in DB_*, JWT_SECRET, EMAIL_*, etc.
-sudo chmod 600 /opt/timeclockplus/.env
+# 3. Build - this also installs the systemd unit, chowns everything to
+#    `timeclockplus`, and enables the service (see docs/SYSTEMD.md)
+sudo npm install
+sudo npm run build
 
 # 4. Create the database schema and the first admin account
 sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npx prisma migrate deploy'
 sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npm run setup -- --email=admin@example.com'
 
-# 5. Install the unit
-sudo cp /opt/timeclockplus/deploy/systemd/timeclockplus.service /etc/systemd/system/
-# Open it and check User=, Group=, WorkingDirectory=, and that ExecStart=
-# points at the right `node` binary (`sudo -u timeclockplus which node`) -
-# see docs/SYSTEMD.md for the full checklist, including the MariaDB unit
-# name check.
-sudo systemctl daemon-reload
-
-# 6. Start it
-sudo systemctl enable --now timeclockplus
+# 5. Start it
+sudo systemctl start timeclockplus
 sudo systemctl status timeclockplus
 journalctl -u timeclockplus -f
 ```
 
+Updating later is `git pull`, `sudo npm run build` (rebuilds and
+re-installs the unit in one step), then
+`sudo systemctl restart timeclockplus`.
+
 **If `systemctl start` fails**, the fix is almost always visible in
 `journalctl -u timeclockplus -n 50 --no-pager` — the two most common
-causes are: (a) steps 3-4 above were skipped, so `.env` is missing or the
-database has no schema/admin yet, or (b) `ExecStart=`'s `node` path
-doesn't match `sudo -u timeclockplus which node` (common with nvm-based
-Node installs). See the troubleshooting notes in
-[`docs/SYSTEMD.md`](docs/SYSTEMD.md) for the full list of things to check.
+causes are: (a) step 3 wasn't run with `sudo`, so `dist/` doesn't exist
+and the unit was never installed, or (b) step 4 was skipped, so `.env` is
+missing values or the database has no schema/admin yet. See the
+troubleshooting notes in [`docs/SYSTEMD.md`](docs/SYSTEMD.md) for the
+full list of things to check.
 
 ## Roles
 
