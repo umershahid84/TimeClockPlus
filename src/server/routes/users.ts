@@ -5,7 +5,7 @@ import { env } from "../config/env";
 import { requireAdministrator, requireAuth } from "../middleware/auth";
 import { generateTempPassword, hashPassword } from "../utils/auth";
 import { asyncHandler } from "../utils/asyncHandler";
-import { sendSupervisorWelcomeEmail } from "../services/email";
+import { sendAdminPasswordResetEmail, sendSupervisorWelcomeEmail } from "../services/email";
 import { recordAudit } from "../services/audit";
 
 export const usersRouter = Router();
@@ -157,6 +157,51 @@ usersRouter.put("/:id/access", asyncHandler(async (req, res) => {
   });
 
   res.json({ success: true });
+}));
+
+// Administrator resets ANOTHER user's password (e.g. a locked-out or
+// forgetful supervisor) - generates a fresh temporary password, emails it
+// (best-effort, same resilient pattern as supervisor creation), and
+// forces a change on next login. Unlike the self-service forgot-password
+// flow, this doesn't require access to the target's email inbox, so it's
+// the recovery path when that email account itself is the problem.
+usersRouter.post("/:id/reset-password", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing) return res.status(404).json({ error: "User not found" });
+
+  const tempPassword = generateTempPassword();
+  const passwordHash = await hashPassword(tempPassword);
+  await prisma.user.update({
+    where: { id },
+    data: {
+      passwordHash,
+      mustChangePassword: true,
+      tempPasswordExpiresAt: new Date(Date.now() + env.tempPasswordExpiryHours * 60 * 60 * 1000),
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      isActive: true,
+    },
+  });
+
+  let emailSent = true;
+  try {
+    await sendAdminPasswordResetEmail({ to: existing.email, userId: existing.userId, tempPassword });
+  } catch (err) {
+    emailSent = false;
+    // eslint-disable-next-line no-console
+    console.error("Failed to send admin password reset email:", err instanceof Error ? err.message : err);
+  }
+
+  await recordAudit({
+    actorUserId: req.user!.id,
+    action: "PASSWORD_RESET",
+    entityType: "USER",
+    entityId: id,
+    newValue: { resetBy: "administrator" },
+  });
+
+  res.json({ userId: existing.userId, emailSent, ...(emailSent ? {} : { tempPassword }) });
 }));
 
 usersRouter.post("/:id/deactivate", asyncHandler(async (req, res) => {

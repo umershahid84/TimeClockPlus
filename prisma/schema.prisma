@@ -101,6 +101,46 @@ enum AuditEntityType {
   USER
   LINE_OF_BUSINESS
   SYSTEM_SETTING
+  CLOCK_EVENT
+}
+
+// A single punch at the employee kiosk (see routes/kiosk.ts). `timestamp`
+// is a REAL instant (server "now" at the moment of the punch) - unlike
+// most other DateTime fields in this schema (schedule shift times,
+// manually-entered actual clock times), which deliberately store the
+// organization's local wall-clock numbers using UTC as a neutral
+// container with no real timezone conversion (see utils/timezone.ts).
+// Punch events need a true instant since they're compared/ordered and
+// audited as real moments in time; they get converted into the
+// wall-clock-container convention only when a completed session is
+// folded into a TimesheetEntry at CLOCK_OUT.
+enum ClockEventType {
+  CLOCK_IN
+  BREAK_START
+  BREAK_END
+  CLOCK_OUT
+}
+
+model ClockEvent {
+  id         Int            @id @default(autoincrement())
+  employeeId Int
+  type       ClockEventType
+  timestamp  DateTime
+  createdAt  DateTime       @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, timestamp])
+  @@map("clock_events")
+}
+
+// How a TimesheetEntry's actual time was recorded: typed in by a
+// supervisor, or synced automatically from the employee's own kiosk
+// punches at Clock Out. Supervisors/administrators can edit either kind
+// afterward - this is purely informational provenance.
+enum TimesheetEntrySource {
+  MANUAL
+  KIOSK
 }
 
 model LineOfBusiness {
@@ -204,6 +244,8 @@ model Employee {
   schedules    EmployeeSchedule[]
   timesheets   Timesheet[]
   customFields EmployeeCustomFieldValue[]
+  clockEvents  ClockEvent[]
+  auditLogs    AuditLog[]
 
   @@index([lineOfBusinessId])
   @@map("employees")
@@ -319,6 +361,7 @@ model TimesheetEntry {
   supplementalType     SupplementalTimeType @default(NONE)
   supplementalHours    Decimal              @default(0) @db.Decimal(6, 2)
   timeType             TimeType             @default(REGULAR_SHIFT)
+  source               TimesheetEntrySource @default(MANUAL)
 
   notes       String?  @db.Text
   createdById Int?
@@ -346,7 +389,8 @@ model AuditLog {
   newValue      String?         @db.Text // JSON snapshot
   createdAt     DateTime        @default(now())
 
-  actor User? @relation("AuditActor", fields: [actorUserId], references: [id])
+  actor    User?     @relation("AuditActor", fields: [actorUserId], references: [id])
+  employee Employee? @relation(fields: [employeeId], references: [id])
 
   @@index([entityType, entityId])
   @@index([employeeId])

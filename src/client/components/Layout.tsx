@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: "/employee-timesheets", label: "Employee Timesheets" },
   { to: "/reports", label: "Reports" },
   { to: "/users", label: "Supervisors / Users", adminOnly: true },
+  { to: "/audit-log", label: "Audit Log", adminOnly: true },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {

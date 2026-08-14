@@ -12,6 +12,8 @@ import { timesheetsRouter } from "./routes/timesheets";
 import { usersRouter } from "./routes/users";
 import { linesOfBusinessRouter } from "./routes/linesOfBusiness";
 import { reportsRouter } from "./routes/reports";
+import { kioskRouter } from "./routes/kiosk";
+import { auditLogRouter } from "./routes/auditLog";
 
 // Last-resort safety net: every route handler is wrapped in asyncHandler
 // (see utils/asyncHandler.ts) so application errors are caught and
@@ -37,6 +39,12 @@ app.use(express.json());
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
+// Public, non-sensitive app configuration - needed by the unauthenticated
+// kiosk page (and any authenticated page) to render real timestamps
+// (kiosk punches, audit log entries) in the organization's actual
+// timezone rather than the browser's.
+app.get("/api/config", (_req, res) => res.json({ timezone: env.appTimezone }));
+
 app.use("/api/auth", authRouter);
 app.use("/api/employees", employeesRouter);
 app.use("/api/schedules", schedulesRouter);
@@ -44,6 +52,8 @@ app.use("/api/timesheets", timesheetsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/lines-of-business", linesOfBusinessRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/kiosk", kioskRouter);
+app.use("/api/audit-log", auditLogRouter);
 
 // This is a single integrated application: the same Express process that
 // serves /api also serves the built React app (dist/client) whenever a

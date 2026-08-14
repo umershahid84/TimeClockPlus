@@ -13,6 +13,8 @@ import { TimesheetsPage } from "./pages/TimesheetsPage";
 import { EmployeeTimesheetsPage } from "./pages/EmployeeTimesheetsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { UsersPage } from "./pages/UsersPage";
+import { KioskPage } from "./pages/KioskPage";
+import { AuditLogPage } from "./pages/AuditLogPage";
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const { user, loading, mustChangePassword } = useAuth();
@@ -29,6 +31,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/forgot-username" element={<ForgotUsernamePage />} />
       <Route path="/change-password" element={<ChangePasswordPage />} />
+      <Route path="/kiosk" element={<KioskPage />} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
       <Route path="/employees/:id" element={<ProtectedRoute><EmployeeDetailPage /></ProtectedRoute>} />
@@ -37,6 +40,7 @@ export default function App() {
       <Route path="/employee-timesheets" element={<ProtectedRoute><EmployeeTimesheetsPage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+      <Route path="/audit-log" element={<ProtectedRoute><AuditLogPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

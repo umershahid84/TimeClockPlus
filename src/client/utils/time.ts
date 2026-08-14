@@ -51,3 +51,26 @@ export function toTimeInputValue(value: string | Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
 }
+
+/**
+ * Formats a REAL instant (kiosk punches, audit log timestamps, login
+ * times) in the organization's actual configured timezone - genuine
+ * conversion, unlike formatTime/formatDate above which just read UTC
+ * components back out of the wall-clock-container convention. `timezone`
+ * comes from useAppConfig() (see context/AppConfigContext.tsx).
+ */
+export function formatInstant(value: string | Date | null | undefined, timezone: string): string {
+  if (!value) return "";
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(date);
+}

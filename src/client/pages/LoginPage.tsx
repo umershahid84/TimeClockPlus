@@ -62,6 +62,9 @@ export function LoginPage() {
           <span aria-hidden="true">&middot;</span>
           <Link to="/forgot-username">Forgot User ID?</Link>
         </p>
+        <p className="muted login-links">
+          <Link to="/kiosk">Employee Time Clock &rarr;</Link>
+        </p>
       </div>
     </div>
   );

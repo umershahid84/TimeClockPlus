@@ -121,6 +121,23 @@ export async function sendPasswordResetCodeEmail(params: { to: string; code: str
   );
 }
 
+export async function sendAdminPasswordResetEmail(params: { to: string; userId: string; tempPassword: string }) {
+  const loginUrl = `${env.appBaseUrl}/login`;
+  await send(
+    params.to,
+    "TimeClockPlus - Your Password Was Reset",
+    `
+      <p>An administrator has reset your TimeClockPlus password.</p>
+      <p><strong>User ID:</strong> ${params.userId}</p>
+      <p><strong>Temporary Password:</strong> ${params.tempPassword}</p>
+      <p><a href="${loginUrl}">Log in here</a></p>
+      <p>You will be required to change your password on first login. This temporary
+      password will expire after ${env.tempPasswordExpiryHours} hours. If you did not
+      expect this, contact your administrator.</p>
+    `
+  );
+}
+
 export async function sendForgotUsernameEmail(params: { to: string; userId: string }) {
   await send(
     params.to,

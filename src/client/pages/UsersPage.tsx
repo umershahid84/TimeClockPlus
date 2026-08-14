@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { LineOfBusiness } from "../api/types";
 
@@ -81,14 +82,37 @@ export function UsersPage() {
     await load();
   }
 
+  async function resetPassword(user: UserRow) {
+    if (!confirm(`Reset ${user.firstName} ${user.lastName}'s password? They will need to sign in with a new temporary password.`)) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{ userId: string; emailSent: boolean; tempPassword?: string }>(`/users/${user.id}/reset-password`);
+      if (result.emailSent) {
+        setMessage(`Password reset for ${user.firstName} ${user.lastName}. A new temporary password was emailed to them.`);
+      } else {
+        setError(
+          `Password reset for "${result.userId}", but the email could not be sent. ` +
+            `Give them this temporary password directly: "${result.tempPassword}".`
+        );
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to reset password.");
+    }
+  }
+
   return (
     <div>
       <div className="topbar">
         <h2>Supervisors / Users</h2>
-        <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? "Cancel" : "Add Supervisor"}</button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <Link to="/audit-log" className="btn secondary">View Audit Log</Link>
+          <button className="btn" onClick={() => setShowForm((s) => !s)}>{showForm ? "Cancel" : "Add Supervisor"}</button>
+        </div>
       </div>
 
-      {message && <p className="muted">{message}</p>}
+      {message && <p className="success-text">{message}</p>}
+      {error && !showForm && <p className="error-text">{error}</p>}
 
       {showForm && (
         <div className="card">
@@ -147,7 +171,11 @@ export function UsersPage() {
                 <td>{u.email}</td>
                 <td>{u.linesOfBusiness.map((l) => l.name).join(", ")}</td>
                 <td>{u.isAdministrator ? "Yes" : "No"}</td>
-                <td><button className="btn secondary" onClick={() => toggleAdmin(u)}>{u.isAdministrator ? "Revoke Admin" : "Grant Admin"}</button></td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button className="btn secondary" onClick={() => toggleAdmin(u)}>{u.isAdministrator ? "Revoke Admin" : "Grant Admin"}</button>{" "}
+                  <button className="btn secondary" onClick={() => resetPassword(u)}>Reset Password</button>{" "}
+                  <Link to={`/audit-log?actorUserId=${u.id}`} className="btn secondary">History</Link>
+                </td>
               </tr>
             ))}
           </tbody>
