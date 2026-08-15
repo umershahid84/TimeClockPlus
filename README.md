@@ -93,48 +93,41 @@ Full walkthrough: [`docs/SYSTEMD.md`](docs/SYSTEMD.md). This lets the app
 start on boot, restart automatically if it crashes, and log to
 `journalctl`.
 
-**`npm run build`, run as root, also installs/refreshes the systemd
-unit, fixes file ownership for the unprivileged service account, and
-enables it** — so `sudo systemctl start timeclockplus` really is the only
-command needed to start it, after the one-time setup below.
+**No `git clone`, no dedicated user, no fixed install directory
+required.** Download the repo however you like (a zip is fine) and
+extract it anywhere, then from inside that folder:
 
 ```bash
-# 1. Dedicated service user (the app runs as this account, not root)
-sudo useradd --system --create-home --shell /usr/sbin/nologin timeclockplus
+cp .env.example .env
+vim .env   # fill in DB_*, JWT_SECRET, EMAIL_*, etc.
+npx prisma migrate deploy
+npm run setup -- --email=admin@example.com
 
-# 2. Clone and configure
-sudo mkdir -p /opt/timeclockplus
-sudo git clone https://github.com/umershahid84/TimeClockPlus.git /opt/timeclockplus
-cd /opt/timeclockplus
-sudo cp .env.example .env
-sudo vim .env   # fill in DB_*, JWT_SECRET, EMAIL_*, etc.
-
-# 3. Build - this also installs the systemd unit, chowns everything to
-#    `timeclockplus`, and enables the service (see docs/SYSTEMD.md)
-sudo npm install
-sudo npm run build
-
-# 4. Create the database schema and the first admin account
-sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npx prisma migrate deploy'
-sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npm run setup -- --email=admin@example.com'
-
-# 5. Start it
+npm install
+npm run build
 sudo systemctl start timeclockplus
-sudo systemctl status timeclockplus
-journalctl -u timeclockplus -f
 ```
 
-Updating later is `git pull`, `sudo npm run build` (rebuilds and
-re-installs the unit in one step), then
+`npm run build`'s `postbuild` step installs/refreshes the systemd unit
+for you — pointed at wherever you extracted the app, running as you
+(unless you've set up a dedicated service account — see
+[`docs/SYSTEMD.md`](docs/SYSTEMD.md) for that optional hardening) — and
+enables it, so `sudo systemctl start timeclockplus` really is the last
+command. Since `npm run build` isn't run as root here, it shells out to
+`sudo` internally for that one step, so **the first time** it'll prompt
+for your password partway through the build.
+
+Updating later is the same shape: `npm install && npm run build`, then
 `sudo systemctl restart timeclockplus`.
 
 **If `systemctl start` fails**, the fix is almost always visible in
-`journalctl -u timeclockplus -n 50 --no-pager` — the two most common
-causes are: (a) step 3 wasn't run with `sudo`, so `dist/` doesn't exist
-and the unit was never installed, or (b) step 4 was skipped, so `.env` is
-missing values or the database has no schema/admin yet. See the
-troubleshooting notes in [`docs/SYSTEMD.md`](docs/SYSTEMD.md) for the
-full list of things to check.
+`journalctl -u timeclockplus -n 50 --no-pager` — the most common causes
+are: (a) `npm run build` never actually finished on *this* machine (each
+server needs its own build — nothing carries over from another host), or
+(b) `.env` is missing values or the database has no schema/admin account
+yet. See the troubleshooting notes in
+[`docs/SYSTEMD.md`](docs/SYSTEMD.md) for the full list of things to
+check.
 
 ## Roles
 

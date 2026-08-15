@@ -4,126 +4,115 @@ This keeps the app (the single Node process that serves both `/api` and
 the web UI) running continuously on a Linux server: it starts on boot,
 restarts automatically if it crashes, and its logs go to `journalctl`.
 
-**`npm run build` installs/refreshes the systemd unit for you** when run
-as root (see "How the automatic install works" below) - so after the
-one-time setup below, deploying an update is just `git pull`,
-`sudo npm run build`, and `sudo systemctl restart timeclockplus`, and
-starting it fresh is just `sudo systemctl start timeclockplus`.
+## The minimal flow: 3 commands, wherever you extracted the app
 
-## 1. Create a dedicated service user
-
-The app itself still runs as this unprivileged account at runtime (via
-`User=`/`Group=` in the unit file) - only the build/install step below
-runs as root, to be able to write `/etc/systemd/system` and fix file
-ownership.
+No `git clone` needed, no dedicated `/opt` directory, no separate service
+account to create first. Download the repo (as a zip, or however you
+like) and extract it anywhere - your home directory is fine - then from
+inside that folder:
 
 ```bash
-sudo useradd --system --create-home --shell /usr/sbin/nologin timeclockplus
-```
+cp .env.example .env
+vim .env              # fill in DB_*, JWT_SECRET, EMAIL_*, etc. - see SETUP_LOCAL.md / DEPLOY_CLOUD.md
+npx prisma migrate deploy
+npm run setup -- --email=admin@example.com
 
-## 2. Clone and configure the app
-
-```bash
-sudo mkdir -p /opt/timeclockplus
-sudo git clone https://github.com/umershahid84/TimeClockPlus.git /opt/timeclockplus
-cd /opt/timeclockplus
-sudo cp .env.example .env
-sudo vim .env   # fill in DB_*, JWT_SECRET, EMAIL_*, etc. - see SETUP_LOCAL.md / DEPLOY_CLOUD.md
-```
-
-## 3. Build (this installs the systemd unit too)
-
-```bash
-sudo npm install
-sudo npm run build
-```
-
-Because this ran as root, `npm run build`'s `postbuild` step
-(`scripts/postbuild-systemd.js`) automatically:
-
-- writes `/etc/systemd/system/timeclockplus.service` from
-  [`deploy/systemd/timeclockplus.service`](../deploy/systemd/timeclockplus.service),
-  filling in `User=`/`Group=timeclockplus`, `WorkingDirectory=` (wherever
-  you cloned the app), and `ExecStart=` (the exact `node` binary that ran
-  the build - no more path guessing),
-- runs `chown -R timeclockplus:timeclockplus` on `dist/`, `node_modules/`,
-  `prisma/`, `package.json`, `package-lock.json`, and `.env`, since the
-  service itself runs as the unprivileged user, not root,
-- runs `systemctl daemon-reload` and `systemctl enable timeclockplus`
-  (so it also starts on boot from here on).
-
-If your service account isn't named `timeclockplus`, set
-`TIMECLOCKPLUS_SERVICE_USER` (and `TIMECLOCKPLUS_SERVICE_GROUP` if it
-differs) before running the build, e.g.
-`sudo TIMECLOCKPLUS_SERVICE_USER=tcp npm run build`.
-
-Double-check the `mariadb.service` dependency in the installed unit's
-`After=` line matches your system's MariaDB unit name (`mariadb.service`
-or `mysql.service` - check with `systemctl list-units | grep -i sql`), or
-remove that line if MariaDB runs on a different host.
-
-## 4. Run migrations and create the initial admin account
-
-One-time, and after every schema change - needs the real database, so
-this stays a deliberate manual step rather than something the build does
-silently:
-
-```bash
-sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npx prisma migrate deploy'
-sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npm run setup -- --email=admin@example.com'
-```
-
-## 5. Start it
-
-```bash
+npm install
+npm run build
 sudo systemctl start timeclockplus
+```
+
+That's the whole thing. `npm run build`'s `postbuild` step
+(`scripts/postbuild-systemd.js`) installs the systemd unit for you:
+
+- writes `/etc/systemd/system/timeclockplus.service` with `WorkingDirectory=`
+  set to wherever you extracted the app and `ExecStart=` set to the exact
+  `node` binary that ran the build - no path guessing, no fixed location,
+- sets `User=`/`Group=` to **you** (whoever ran the build) unless you've
+  set up a dedicated service account (see "Optional hardening" below),
+- runs `systemctl daemon-reload` and `systemctl enable timeclockplus` so
+  it also starts on boot from here on.
+
+Since this step needs root to write `/etc/systemd/system`, and you're
+intentionally not prefixing `npm run build` itself with `sudo`, the
+script shells out to `sudo` internally just for that part - so **the
+first time**, `npm run build` will pop up your normal `sudo` password
+prompt partway through. That's expected; sudo caches it for a few
+minutes, so `sudo systemctl start timeclockplus` right after usually
+won't ask again.
+
+```bash
 sudo systemctl status timeclockplus
+journalctl -u timeclockplus -f
 ```
 
 You should see `active (running)`. Visit the app at
-`http://<server>:<PORT>` (default port 4000, from `.env`). It's already
-enabled for boot from step 3, so this is the only command needed to start
-it from here on (after a reboot, a manual stop, etc.).
+`http://<server>:<PORT>` (default port 4000, from `.env`).
 
-## 6. Logs
+**Updating later** is the same shape: `npm install && npm run build`
+(rebuilds and refreshes the unit in one step) then
+`sudo systemctl restart timeclockplus`. Re-run `npx prisma migrate
+deploy` first if the update includes a schema change.
+
+## Optional hardening: dedicated service account + fixed install path
+
+The minimal flow above runs the app as your own login user, which is
+fine for a lot of setups but means the Node process has your full user
+permissions. If you'd rather it run as a locked-down account with no
+shell and nothing else, set that account up **before** your first
+`npm install`/`npm run build`, and the same 3-command flow picks it up
+automatically - no extra flags needed:
 
 ```bash
-journalctl -u timeclockplus -f          # follow live
-journalctl -u timeclockplus --since today
+sudo useradd --system --create-home --shell /usr/sbin/nologin timeclockplus
+sudo mkdir -p /opt/timeclockplus
+sudo chown timeclockplus:timeclockplus /opt/timeclockplus
+# extract the app into /opt/timeclockplus, then cd into it
 ```
 
-## 7. Deploying an update
+From here, run the same steps as above (`cp .env.example .env` and edit
+it, `npx prisma migrate deploy`, `npm run setup`, `npm install`, `npm run
+build`, `sudo systemctl start timeclockplus`) as whichever user owns the
+files - `npm run build`'s postbuild step detects that the `timeclockplus`
+account already exists and uses it for `User=`/`Group=` instead of
+defaulting to you, and `chown -R`s `dist/`, `node_modules/`, `prisma/`,
+`package.json`, `package-lock.json`, and `.env` to that account so the
+unprivileged service process can actually read them.
 
-```bash
-cd /opt/timeclockplus
-sudo git pull
-sudo npm install
-sudo npm run build              # rebuilds + refreshes the unit + re-chowns + re-enables
-sudo -u timeclockplus -H bash -c 'cd /opt/timeclockplus && npx prisma migrate deploy'
-sudo systemctl restart timeclockplus
-```
+If your dedicated account isn't named `timeclockplus`, set
+`TIMECLOCKPLUS_SERVICE_USER` (and `TIMECLOCKPLUS_SERVICE_GROUP` if it
+differs) before building, e.g.
+`TIMECLOCKPLUS_SERVICE_USER=tcp npm run build`.
+
+Either way, double-check the `mariadb.service` dependency in the
+installed unit's `After=` line matches your system's MariaDB unit name
+(`mariadb.service` or `mysql.service` - check with
+`systemctl list-units | grep -i sql`), or remove that line if MariaDB
+runs on a different host.
 
 ## How the automatic install works (and when it doesn't)
 
 `postbuild` (wired up in `package.json`, implemented in
 [`scripts/postbuild-systemd.js`](../scripts/postbuild-systemd.js)) runs
 after every `npm run build`, on every platform, but only *acts* when
-`process.platform === "linux"` **and** it's running as root (`process.getuid() === 0`).
-Everywhere else - a contributor's laptop, `npm run dev`, CI, macOS/Windows,
-or `npm run build` without `sudo` - it prints a one-line note and exits
-`0`: your build output is unaffected either way, and the build never
-fails because of this step.
+`process.platform === "linux"`. On macOS/Windows, in CI, or anywhere the
+`deploy/systemd/timeclockplus.service` template isn't present, it prints
+nothing extra and exits `0` - your build output is unaffected either
+way, and the build never fails because of this step.
 
-If you'd rather keep the original fully-separated-privilege workflow
-(build only ever runs as the unprivileged `timeclockplus` user, you
-install/edit the unit by hand), that still works exactly as before -
-just don't run `npm install`/`npm run build` as root, and follow the
-manual "Install the systemd unit" steps: `sudo cp
-deploy/systemd/timeclockplus.service /etc/systemd/system/`, edit
-`User=`/`Group=`/`WorkingDirectory=`/`ExecStart=` by hand, then
-`sudo systemctl daemon-reload && sudo systemctl enable --now timeclockplus`.
+On Linux it always tries to install/refresh the unit: as a direct file
+write if `npm run build` itself was run as root (`sudo npm install &&
+sudo npm run build`), or via an internal `sudo` call (prompting for your
+password in the terminal) otherwise. If `sudo` isn't available, or you
+don't have permission to use it, the systemd steps fail gracefully with
+a clear message and manual fallback command - your build output is still
+there either way, install the unit by hand with:
+`sudo cp deploy/systemd/timeclockplus.service /etc/systemd/system/`, edit
+`User=`/`Group=`/`WorkingDirectory=`/`ExecStart=` to match your install,
+then `sudo systemctl daemon-reload && sudo systemctl enable --now
+timeclockplus`.
 
-## 8. Common commands
+## Common commands
 
 | Action | Command |
 |---|---|
@@ -131,8 +120,10 @@ deploy/systemd/timeclockplus.service /etc/systemd/system/`, edit
 | Restart | `sudo systemctl restart timeclockplus` |
 | Disable on boot | `sudo systemctl disable timeclockplus` |
 | Check status | `sudo systemctl status timeclockplus` |
+| Logs (live) | `journalctl -u timeclockplus -f` |
+| Logs (today) | `journalctl -u timeclockplus --since today` |
 
-## 9. HTTPS
+## HTTPS
 
 systemd keeps the app itself running, but it doesn't terminate TLS. Put a
 reverse proxy (nginx, Caddy, etc.) in front of it on port 443 and forward
@@ -141,7 +132,7 @@ Let's Encrypt certificate automatically with a one-line config. This is a
 separate concern from the service staying up, and can be added
 independently of everything above.
 
-## 10. Troubleshooting a failed start
+## Troubleshooting a failed start
 
 Always start with the actual error, not guesswork:
 
@@ -152,28 +143,28 @@ journalctl -u timeclockplus -n 50 --no-pager
 
 Common causes, in order of likelihood:
 
-- **`npm run build` was never run as root, or failed.** The automatic
-  unit install/chown/enable (step 3) only happens when `sudo npm run
-  build` succeeds as root. If you ran `npm install`/`npm run build`
-  without `sudo`, or the build itself errored out, `dist/server/index.js`
-  (the `ExecStart=` target) won't exist and the unit won't be installed
-  at all yet. Check with
-  `sudo -u timeclockplus test -f /opt/timeclockplus/dist/server/index.js && echo OK`,
-  and re-run `sudo npm run build` from `/opt/timeclockplus` if it's missing.
+- **"Unit timeclockplus.service not loaded" / not found.** The unit was
+  never installed on *this* machine - each server needs its own `npm run
+  build` run against its own copy of the app; nothing carries over from
+  another host. Check `ls -la /etc/systemd/system/timeclockplus.service`;
+  if it's missing, `cd` into the folder where you extracted the app on
+  this machine and run `npm install && npm run build`.
+- **`npm run build` never actually finished, or was never run here.**
+  `dist/server/index.js` (the `ExecStart=` target) only exists after a
+  successful build. Check with
+  `test -f dist/server/index.js && echo OK` from the app's folder, and
+  re-run `npm install && npm run build` if it's missing - watch the
+  build's own output for errors first.
 - **`.env` missing or incomplete.** The app reads its configuration from
-  `WorkingDirectory/.env` (step 2) and throws
+  `WorkingDirectory/.env` and throws
   `Missing required environment variable: ...` on boot if a required
   variable (e.g. `DB_USER`, `JWT_SECRET`) isn't set. Confirm the file
-  exists and is readable by the service user:
-  `sudo -u timeclockplus cat /opt/timeclockplus/.env`.
-- **Wrong `node` path, or a stale hand-edited unit.** If you followed the
-  automated flow (step 3), `ExecStart=` was already filled in with the
-  exact `node` binary that ran the build, so this shouldn't happen -
-  re-run `sudo npm run build` to refresh it. If you're on the manual
-  workflow instead, compare `sudo -u timeclockplus which node` against
-  the `ExecStart=` line in `/etc/systemd/system/timeclockplus.service`,
-  fix it by hand, then
-  `sudo systemctl daemon-reload && sudo systemctl restart timeclockplus`.
+  exists in the app's folder and has real values, not just the
+  `.env.example` placeholders.
+- **Wrong `node` path, or a stale hand-edited unit.** The automated
+  install always fills `ExecStart=` in with the exact `node` binary that
+  ran the build, so this shouldn't happen unless you edited the unit by
+  hand afterward - re-run `npm install && npm run build` to refresh it.
 - **Database not reachable.** If MariaDB isn't running yet, or
   `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASS` in `.env` are wrong,
   the log will show a Prisma "Can't reach database server" error.
@@ -182,25 +173,22 @@ Common causes, in order of likelihood:
   that the unit is left in a `failed` state and needs
   `sudo systemctl reset-failed timeclockplus` once the database is
   actually reachable, followed by `sudo systemctl start timeclockplus`.
-- **No schema / no admin account yet.** Building (step 3) only installs
-  the code - you still need to run step 4
-  (`npx prisma migrate deploy` and `npm run setup -- --email=...`) once
-  against the real database before the app has anything to serve.
-- **Permissions on `WorkingDirectory` or `.env`.** `sudo npm run build`
-  chowns `dist/`, `node_modules/`, `prisma/`, `package.json`,
-  `package-lock.json`, and `.env` to the service user automatically, but
-  only those - if you added other files the app needs to read at
-  runtime, or ran `git pull`/edited files as a different user afterward,
-  re-run `sudo npm run build`, or manually
-  `sudo chown -R timeclockplus:timeclockplus /opt/timeclockplus`.
+- **No schema / no admin account yet.** Building only installs the code -
+  you still need `npx prisma migrate deploy` and
+  `npm run setup -- --email=...` once against the real database before
+  the app has anything to serve.
+- **Permissions.** `npm run build` chowns `dist/`, `node_modules/`,
+  `prisma/`, `package.json`, `package-lock.json`, and `.env` to the
+  service account automatically, but only if that account differs from
+  whoever ran the build (i.e. only on the "optional hardening" path) -
+  and only those specific paths. If you added other files the app needs
+  to read at runtime, or ran `git pull`/edited files as a different user
+  afterward, re-run `npm install && npm run build`.
 - **`User=`/`Group=`/`WorkingDirectory=` in the unit file don't match**
-  where you actually deployed the app. On the automated flow this is
-  fixed by re-running `sudo npm run build` (optionally with
-  `TIMECLOCKPLUS_SERVICE_USER`/`TIMECLOCKPLUS_SERVICE_GROUP` set); on the
-  manual flow, re-copy and re-edit
-  `/etc/systemd/system/timeclockplus.service` by hand - either way the
-  running config is whatever `daemon-reload` last picked up from
-  `/etc/systemd/system/`, not the copy in the repo.
+  where you actually deployed the app. Re-running `npm install && npm run
+  build` from the correct folder fixes this - the running config is
+  whatever `daemon-reload` last picked up from
+  `/etc/systemd/system/timeclockplus.service`, not the copy in the repo.
 
 Once you've made a change, always re-run:
 
