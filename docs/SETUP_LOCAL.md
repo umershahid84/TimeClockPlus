@@ -97,7 +97,7 @@ set `EMAIL_IGNORE_TLS=true` instead.
 
 ```bash
 npm install
-npx prisma migrate dev --name init
+npm run prisma:migrate -- --name init
 ```
 
 This creates all tables (lines of business, users, employees,

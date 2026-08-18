@@ -13,9 +13,9 @@
     "postbuild": "node scripts/postbuild-systemd.js",
     "start": "node dist/server/index.js",
     "setup": "tsx src/server/scripts/setup.ts",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
+    "prisma:generate": "node scripts/prisma-env.js generate",
+    "prisma:migrate": "node scripts/prisma-env.js migrate dev",
+    "prisma:deploy": "node scripts/prisma-env.js migrate deploy",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit"
   },

@@ -14,7 +14,7 @@ inside that folder:
 ```bash
 cp .env.example .env
 vim .env              # fill in DB_*, JWT_SECRET, EMAIL_*, etc. - see SETUP_LOCAL.md / DEPLOY_CLOUD.md
-npx prisma migrate deploy
+npm run prisma:deploy
 npm run setup -- --email=admin@example.com
 
 npm install
@@ -51,8 +51,8 @@ You should see `active (running)`. Visit the app at
 
 **Updating later** is the same shape: `npm install && npm run build`
 (rebuilds and refreshes the unit in one step) then
-`sudo systemctl restart timeclockplus`. Re-run `npx prisma migrate
-deploy` first if the update includes a schema change.
+`sudo systemctl restart timeclockplus`. Re-run `npm run prisma:deploy`
+first if the update includes a schema change.
 
 ## Optional hardening: dedicated service account + fixed install path
 
@@ -71,7 +71,7 @@ sudo chown timeclockplus:timeclockplus /opt/timeclockplus
 ```
 
 From here, run the same steps as above (`cp .env.example .env` and edit
-it, `npx prisma migrate deploy`, `npm run setup`, `npm install`, `npm run
+it, `npm run prisma:deploy`, `npm run setup`, `npm install`, `npm run
 build`, `sudo systemctl start timeclockplus`) as whichever user owns the
 files - `npm run build`'s postbuild step detects that the `timeclockplus`
 account already exists and uses it for `User=`/`Group=` instead of
@@ -174,7 +174,7 @@ Common causes, in order of likelihood:
   `sudo systemctl reset-failed timeclockplus` once the database is
   actually reachable, followed by `sudo systemctl start timeclockplus`.
 - **No schema / no admin account yet.** Building only installs the code -
-  you still need `npx prisma migrate deploy` and
+  you still need `npm run prisma:deploy` and
   `npm run setup -- --email=...` once against the real database before
   the app has anything to serve.
 - **Permissions.** `npm run build` chowns `dist/`, `node_modules/`,

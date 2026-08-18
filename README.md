@@ -68,7 +68,7 @@ Quick start (after installing MariaDB — see the local setup guide):
 ```bash
 cp .env.example .env     # edit DB_*, JWT_SECRET, EMAIL_* as needed
 npm install
-npx prisma migrate dev --name init
+npm run prisma:migrate -- --name init
 npm run setup -- --email=admin@example.com
 npm run dev               # runs API + web app together
 ```
@@ -100,7 +100,7 @@ extract it anywhere, then from inside that folder:
 ```bash
 cp .env.example .env
 vim .env   # fill in DB_*, JWT_SECRET, EMAIL_*, etc.
-npx prisma migrate deploy
+npm run prisma:deploy
 npm run setup -- --email=admin@example.com
 
 npm install

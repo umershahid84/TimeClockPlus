@@ -58,7 +58,7 @@ following environment variables for the service:
 1. Push this repository to GitHub (or connect your existing remote).
 2. In Railway/Render, create a new Web Service pointing at the repository
    root (there is only one project to point at).
-3. Build command: `npm install && npm run build && npx prisma migrate deploy`
+3. Build command: `npm install && npm run build && npm run prisma:deploy`
 4. Start command: `npm start`
 5. Most providers auto-provision HTTPS for you; no extra configuration is
    required for TLS termination at the edge.
@@ -90,5 +90,5 @@ npm run setup -- --email=admin@yourcompany.com
 
 When you change `prisma/schema.prisma`, generate and apply a new
 migration locally, commit the generated migration files, then let your
-deploy pipeline run `npx prisma migrate deploy` against the cloud database
+deploy pipeline run `npm run prisma:deploy` against the cloud database
 (this repo's suggested build command already does this on every deploy).
